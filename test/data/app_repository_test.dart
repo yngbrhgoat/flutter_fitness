@@ -5,34 +5,25 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('AppRepository', () {
-    test('rejects exercises suitable for multiple goals', () async {
+    test('rejects exercises with invalid single-goal suitability', () async {
       final AppRepository repository = AppRepository(
         dataSource: MockBackendDataSource.seeded(),
       );
 
       final Exercise invalidExercise = Exercise(
-        id: 'multi_goal_exercise',
-        name: 'Multi Goal',
+        id: 'invalid_goal_exercise',
+        name: 'Invalid Goal',
         description: 'Invalid config for test.',
         mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[MuscleGroup.core],
-        goalConfigurations: <TrainingGoal, GoalConfiguration>{
-          TrainingGoal.muscleGain: const GoalConfiguration(
-            suitabilityRating: 8,
-            recommendedSets: 4,
-            recommendedRepetitions: 12,
-            recommendedDurationSeconds: 40,
-          ),
-          TrainingGoal.weightLoss: const GoalConfiguration(
-            suitabilityRating: 7,
-            recommendedSets: 4,
-            recommendedRepetitions: 14,
-            recommendedDurationSeconds: 35,
-          ),
-          TrainingGoal.strengthIncrease: GoalConfiguration.zero(),
-          TrainingGoal.enduranceIncrease: GoalConfiguration.zero(),
-        },
+        goal: TrainingGoal.muscleGain,
+        goalConfiguration: const GoalConfiguration(
+          suitabilityRating: 0,
+          recommendedSets: 4,
+          recommendedRepetitions: 12,
+          recommendedDurationSeconds: 40,
+        ),
       );
 
       expect(
@@ -53,17 +44,13 @@ void main() {
         mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[MuscleGroup.legs],
-        goalConfigurations: <TrainingGoal, GoalConfiguration>{
-          TrainingGoal.muscleGain: GoalConfiguration.zero(),
-          TrainingGoal.weightLoss: const GoalConfiguration(
-            suitabilityRating: 9,
-            recommendedSets: 4,
-            recommendedRepetitions: 18,
-            recommendedDurationSeconds: 35,
-          ),
-          TrainingGoal.strengthIncrease: GoalConfiguration.zero(),
-          TrainingGoal.enduranceIncrease: GoalConfiguration.zero(),
-        },
+        goal: TrainingGoal.weightLoss,
+        goalConfiguration: const GoalConfiguration(
+          suitabilityRating: 9,
+          recommendedSets: 4,
+          recommendedRepetitions: 18,
+          recommendedDurationSeconds: 35,
+        ),
       );
 
       await repository.addExercise(exercise: validExercise);
@@ -84,11 +71,11 @@ void main() {
         dataSource: MockBackendDataSource.seeded(),
       );
 
-      final UserProfile user = await repository.loginOrCreateUser(
+      final LoginResult loginResult = await repository.loginOrCreateUser(
         username: 'goal_update_user',
       );
       final UserProfile updated = await repository.updateUserPrimaryGoal(
-        userId: user.id,
+        userId: loginResult.user.id,
         primaryGoal: TrainingGoal.enduranceIncrease,
       );
 

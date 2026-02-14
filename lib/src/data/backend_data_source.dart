@@ -12,7 +12,7 @@ abstract class BackendDataSource {
   Future<List<UserProfile>> fetchRecentUsers({final int limit = 3});
 
   /// Logs in an existing user or creates a new one.
-  Future<UserProfile> loginOrCreateUser({required final String username});
+  Future<LoginResult> loginOrCreateUser({required final String username});
 
   /// Updates and returns a user's primary training goal.
   Future<UserProfile> updateUserPrimaryGoal({

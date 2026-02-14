@@ -14,32 +14,13 @@ GoalConfiguration cfg(
   );
 }
 
-Map<TrainingGoal, GoalConfiguration> fullGoalConfig({
-  required final GoalConfiguration muscleGain,
-  required final GoalConfiguration weightLoss,
-  required final GoalConfiguration strengthIncrease,
-  required final GoalConfiguration enduranceIncrease,
-}) {
-  return <TrainingGoal, GoalConfiguration>{
-    TrainingGoal.muscleGain: muscleGain,
-    TrainingGoal.weightLoss: weightLoss,
-    TrainingGoal.strengthIncrease: strengthIncrease,
-    TrainingGoal.enduranceIncrease: enduranceIncrease,
-  };
-}
-
 Exercise buildExercise({
   required final String id,
   required final String name,
   required final int suitability,
-  final TrainingGoal assignedGoal = TrainingGoal.muscleGain,
+  final TrainingGoal goal = TrainingGoal.muscleGain,
 }) {
-  GoalConfiguration forGoal(final TrainingGoal goal) {
-    if (goal != assignedGoal) {
-      return GoalConfiguration.zero();
-    }
-    return cfg(suitability, 4, 10, 40);
-  }
+  final bool isSuitable = suitability > 0;
 
   return Exercise(
     id: id,
@@ -48,11 +29,12 @@ Exercise buildExercise({
     mediaUrl: null,
     equipment: Equipment.none,
     targetMuscleGroups: const <MuscleGroup>[MuscleGroup.core],
-    goalConfigurations: fullGoalConfig(
-      muscleGain: forGoal(TrainingGoal.muscleGain),
-      weightLoss: forGoal(TrainingGoal.weightLoss),
-      strengthIncrease: forGoal(TrainingGoal.strengthIncrease),
-      enduranceIncrease: forGoal(TrainingGoal.enduranceIncrease),
+    goal: goal,
+    goalConfiguration: cfg(
+      suitability,
+      isSuitable ? 4 : 0,
+      isSuitable ? 10 : 0,
+      isSuitable ? 40 : 0,
     ),
   );
 }

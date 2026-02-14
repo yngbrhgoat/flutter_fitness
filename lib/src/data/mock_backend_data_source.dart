@@ -43,7 +43,7 @@ class MockBackendDataSource implements BackendDataSource {
   }
 
   @override
-  Future<UserProfile> loginOrCreateUser({
+  Future<LoginResult> loginOrCreateUser({
     required final String username,
   }) async {
     final String normalizedUsername = username.trim();
@@ -66,7 +66,7 @@ class MockBackendDataSource implements BackendDataSource {
       );
       _usersById[updated.id] = updated;
       _touchRecentUser(updated.id);
-      return updated;
+      return LoginResult(user: updated, isNewUser: false);
     }
 
     final String userId = 'user_${now.microsecondsSinceEpoch}';
@@ -79,7 +79,7 @@ class MockBackendDataSource implements BackendDataSource {
     _usersById[userId] = created;
     _sessionsByUserId[userId] = <TrainingSession>[];
     _touchRecentUser(userId);
-    return created;
+    return LoginResult(user: created, isNewUser: true);
   }
 
   @override
@@ -248,296 +248,439 @@ class MockBackendDataSource implements BackendDataSource {
     );
   }
 
-  static Map<TrainingGoal, GoalConfiguration> _goals({
-    required final GoalConfiguration muscleGain,
-    required final GoalConfiguration weightLoss,
-    required final GoalConfiguration strengthIncrease,
-    required final GoalConfiguration enduranceIncrease,
+  static Exercise _exercise({
+    required final String id,
+    required final String name,
+    required final String description,
+    required final Equipment equipment,
+    required final List<MuscleGroup> targetMuscleGroups,
+    required final TrainingGoal goal,
+    required final int suitability,
+    required final int sets,
+    required final int reps,
+    required final int duration,
   }) {
-    final Map<TrainingGoal, GoalConfiguration> raw =
-        <TrainingGoal, GoalConfiguration>{
-          TrainingGoal.muscleGain: muscleGain,
-          TrainingGoal.weightLoss: weightLoss,
-          TrainingGoal.strengthIncrease: strengthIncrease,
-          TrainingGoal.enduranceIncrease: enduranceIncrease,
-        };
-
-    TrainingGoal? selectedGoal;
-    int highestSuitability = 0;
-    for (final MapEntry<TrainingGoal, GoalConfiguration> entry in raw.entries) {
-      final int suitability = entry.value.suitabilityRating;
-      if (suitability <= highestSuitability) {
-        continue;
-      }
-      highestSuitability = suitability;
-      selectedGoal = entry.key;
-    }
-
-    return <TrainingGoal, GoalConfiguration>{
-      for (final TrainingGoal goal in TrainingGoal.values)
-        goal: goal == selectedGoal ? raw[goal]! : GoalConfiguration.zero(),
-    };
+    return Exercise(
+      id: id,
+      name: name,
+      description: description,
+      mediaUrl: null,
+      equipment: equipment,
+      targetMuscleGroups: targetMuscleGroups,
+      goal: goal,
+      goalConfiguration: _config(suitability, sets, reps, duration),
+    );
   }
 
   static List<Exercise> _seedExercises() {
     return <Exercise>[
-      Exercise(
+      _exercise(
         id: 'pushups',
         name: 'Push-ups',
         description:
             'Bodyweight pressing movement for chest, shoulders, and triceps.',
-        mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.chest,
           MuscleGroup.arms,
           MuscleGroup.shoulders,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(8, 4, 12, 45),
-          weightLoss: _config(7, 4, 15, 40),
-          strengthIncrease: _config(8, 5, 8, 50),
-          enduranceIncrease: _config(8, 4, 18, 40),
-        ),
+        goal: TrainingGoal.muscleGain,
+        suitability: 8,
+        sets: 4,
+        reps: 12,
+        duration: 45,
       ),
-      Exercise(
+      _exercise(
         id: 'squats',
         name: 'Air Squats',
         description: 'Bodyweight squat variation to train legs and glutes.',
-        mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.legs,
           MuscleGroup.glutes,
           MuscleGroup.core,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(7, 4, 14, 45),
-          weightLoss: _config(8, 4, 16, 40),
-          strengthIncrease: _config(6, 5, 10, 50),
-          enduranceIncrease: _config(9, 5, 18, 40),
-        ),
+        goal: TrainingGoal.enduranceIncrease,
+        suitability: 9,
+        sets: 5,
+        reps: 18,
+        duration: 40,
       ),
-      Exercise(
+      _exercise(
         id: 'pullups',
         name: 'Pull-ups',
         description: 'Upper-body pulling exercise for back and arm strength.',
-        mediaUrl: null,
         equipment: Equipment.pullUpBar,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.back,
           MuscleGroup.arms,
           MuscleGroup.shoulders,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(9, 4, 8, 55),
-          weightLoss: _config(5, 3, 8, 50),
-          strengthIncrease: _config(10, 5, 6, 60),
-          enduranceIncrease: _config(6, 4, 10, 50),
-        ),
+        goal: TrainingGoal.strengthIncrease,
+        suitability: 10,
+        sets: 5,
+        reps: 6,
+        duration: 60,
       ),
-      Exercise(
+      _exercise(
         id: 'plank',
         name: 'Plank',
         description: 'Isometric core hold that improves trunk stability.',
-        mediaUrl: null,
         equipment: Equipment.mat,
         targetMuscleGroups: const <MuscleGroup>[MuscleGroup.core],
-        goalConfigurations: _goals(
-          muscleGain: _config(4, 3, 1, 50),
-          weightLoss: _config(6, 4, 1, 45),
-          strengthIncrease: _config(5, 4, 1, 60),
-          enduranceIncrease: _config(8, 4, 1, 60),
-        ),
+        goal: TrainingGoal.enduranceIncrease,
+        suitability: 8,
+        sets: 4,
+        reps: 1,
+        duration: 60,
       ),
-      Exercise(
+      _exercise(
         id: 'lunges',
         name: 'Lunges',
         description: 'Single-leg exercise to train legs, balance, and glutes.',
-        mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.legs,
           MuscleGroup.glutes,
           MuscleGroup.core,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(7, 4, 12, 50),
-          weightLoss: _config(8, 4, 14, 45),
-          strengthIncrease: _config(6, 5, 8, 55),
-          enduranceIncrease: _config(8, 4, 16, 45),
-        ),
+        goal: TrainingGoal.weightLoss,
+        suitability: 8,
+        sets: 4,
+        reps: 14,
+        duration: 45,
       ),
-      Exercise(
+      _exercise(
         id: 'burpees',
         name: 'Burpees',
         description: 'Full-body conditioning movement with high cardio demand.',
-        mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.fullBody,
           MuscleGroup.core,
           MuscleGroup.legs,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(4, 3, 10, 45),
-          weightLoss: _config(10, 5, 12, 40),
-          strengthIncrease: _config(3, 3, 8, 45),
-          enduranceIncrease: _config(9, 5, 14, 35),
-        ),
+        goal: TrainingGoal.weightLoss,
+        suitability: 10,
+        sets: 5,
+        reps: 12,
+        duration: 40,
       ),
-      Exercise(
+      _exercise(
         id: 'bench_press',
         name: 'Bench Press',
         description: 'Barbell chest press for strength and muscle development.',
-        mediaUrl: null,
         equipment: Equipment.barbell,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.chest,
           MuscleGroup.arms,
           MuscleGroup.shoulders,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(10, 5, 8, 60),
-          weightLoss: _config(2, 3, 8, 55),
-          strengthIncrease: _config(10, 5, 5, 70),
-          enduranceIncrease: _config(2, 3, 10, 50),
-        ),
+        goal: TrainingGoal.strengthIncrease,
+        suitability: 10,
+        sets: 5,
+        reps: 5,
+        duration: 70,
       ),
-      Exercise(
+      _exercise(
         id: 'deadlift',
         name: 'Deadlift',
         description: 'Compound barbell pull targeting posterior chain.',
-        mediaUrl: null,
         equipment: Equipment.barbell,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.back,
           MuscleGroup.legs,
           MuscleGroup.glutes,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(9, 4, 6, 65),
-          weightLoss: _config(2, 3, 8, 55),
-          strengthIncrease: _config(10, 5, 4, 75),
-          enduranceIncrease: _config(1, 0, 0, 0),
-        ),
+        goal: TrainingGoal.strengthIncrease,
+        suitability: 10,
+        sets: 5,
+        reps: 4,
+        duration: 75,
       ),
-      Exercise(
+      _exercise(
         id: 'mountain_climbers',
         name: 'Mountain Climbers',
         description:
             'Dynamic core and cardio drill performed in plank position.',
-        mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.core,
           MuscleGroup.legs,
           MuscleGroup.fullBody,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(3, 3, 16, 40),
-          weightLoss: _config(9, 5, 20, 35),
-          strengthIncrease: _config(2, 3, 14, 40),
-          enduranceIncrease: _config(10, 5, 22, 35),
-        ),
+        goal: TrainingGoal.enduranceIncrease,
+        suitability: 10,
+        sets: 5,
+        reps: 22,
+        duration: 35,
       ),
-      Exercise(
+      _exercise(
         id: 'bicep_curls',
         name: 'Bicep Curls',
         description: 'Isolation movement focusing on elbow flexors.',
-        mediaUrl: null,
         equipment: Equipment.dumbbells,
         targetMuscleGroups: const <MuscleGroup>[MuscleGroup.arms],
-        goalConfigurations: _goals(
-          muscleGain: _config(8, 4, 12, 45),
-          weightLoss: _config(4, 3, 14, 40),
-          strengthIncrease: _config(7, 5, 8, 50),
-          enduranceIncrease: _config(5, 4, 16, 40),
-        ),
+        goal: TrainingGoal.muscleGain,
+        suitability: 8,
+        sets: 4,
+        reps: 12,
+        duration: 45,
       ),
-      Exercise(
+      _exercise(
         id: 'tricep_dips',
         name: 'Tricep Dips',
         description: 'Bodyweight dip variation for triceps and chest.',
-        mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.arms,
           MuscleGroup.chest,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(7, 4, 10, 45),
-          weightLoss: _config(6, 4, 12, 40),
-          strengthIncrease: _config(8, 5, 8, 50),
-          enduranceIncrease: _config(6, 4, 14, 40),
-        ),
+        goal: TrainingGoal.muscleGain,
+        suitability: 7,
+        sets: 4,
+        reps: 10,
+        duration: 45,
       ),
-      Exercise(
+      _exercise(
         id: 'jump_rope',
         name: 'Jump Rope',
         description: 'Cardio-focused exercise for endurance and conditioning.',
-        mediaUrl: null,
         equipment: Equipment.none,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.legs,
           MuscleGroup.fullBody,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(1, 0, 0, 0),
-          weightLoss: _config(10, 5, 30, 45),
-          strengthIncrease: _config(1, 0, 0, 0),
-          enduranceIncrease: _config(10, 6, 35, 40),
-        ),
+        goal: TrainingGoal.weightLoss,
+        suitability: 10,
+        sets: 5,
+        reps: 30,
+        duration: 45,
       ),
-      Exercise(
+      _exercise(
         id: 'shoulder_press',
         name: 'Shoulder Press',
         description: 'Overhead dumbbell press for shoulder and arm strength.',
-        mediaUrl: null,
         equipment: Equipment.dumbbells,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.shoulders,
           MuscleGroup.arms,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(8, 4, 10, 50),
-          weightLoss: _config(3, 3, 12, 45),
-          strengthIncrease: _config(9, 5, 6, 60),
-          enduranceIncrease: _config(4, 4, 14, 45),
-        ),
+        goal: TrainingGoal.strengthIncrease,
+        suitability: 9,
+        sets: 5,
+        reps: 6,
+        duration: 60,
       ),
-      Exercise(
+      _exercise(
         id: 'russian_twists',
         name: 'Russian Twists',
         description: 'Rotational core movement that challenges trunk control.',
-        mediaUrl: null,
         equipment: Equipment.mat,
         targetMuscleGroups: const <MuscleGroup>[MuscleGroup.core],
-        goalConfigurations: _goals(
-          muscleGain: _config(4, 3, 16, 45),
-          weightLoss: _config(8, 4, 20, 40),
-          strengthIncrease: _config(3, 3, 14, 45),
-          enduranceIncrease: _config(9, 5, 22, 40),
-        ),
+        goal: TrainingGoal.weightLoss,
+        suitability: 8,
+        sets: 4,
+        reps: 20,
+        duration: 40,
       ),
-      Exercise(
+      _exercise(
         id: 'kettlebell_swings',
         name: 'Kettlebell Swings',
         description:
             'Explosive hip hinge for power, cardio, and posterior chain.',
-        mediaUrl: null,
         equipment: Equipment.kettlebell,
         targetMuscleGroups: const <MuscleGroup>[
           MuscleGroup.glutes,
           MuscleGroup.back,
           MuscleGroup.fullBody,
         ],
-        goalConfigurations: _goals(
-          muscleGain: _config(7, 4, 14, 45),
-          weightLoss: _config(9, 5, 16, 40),
-          strengthIncrease: _config(8, 5, 10, 55),
-          enduranceIncrease: _config(9, 5, 18, 40),
-        ),
+        goal: TrainingGoal.enduranceIncrease,
+        suitability: 9,
+        sets: 5,
+        reps: 18,
+        duration: 40,
+      ),
+      _exercise(
+        id: 'glute_bridge',
+        name: 'Glute Bridge',
+        description: 'Hip extension drill to build glute strength and control.',
+        equipment: Equipment.mat,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.glutes,
+          MuscleGroup.core,
+        ],
+        goal: TrainingGoal.muscleGain,
+        suitability: 8,
+        sets: 4,
+        reps: 15,
+        duration: 45,
+      ),
+      _exercise(
+        id: 'bicycle_crunches',
+        name: 'Bicycle Crunches',
+        description: 'Alternating core movement for abs and obliques.',
+        equipment: Equipment.mat,
+        targetMuscleGroups: const <MuscleGroup>[MuscleGroup.core],
+        goal: TrainingGoal.weightLoss,
+        suitability: 8,
+        sets: 4,
+        reps: 24,
+        duration: 35,
+      ),
+      _exercise(
+        id: 'goblet_squat',
+        name: 'Goblet Squat',
+        description: 'Front-loaded squat with a kettlebell or dumbbell.',
+        equipment: Equipment.kettlebell,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.legs,
+          MuscleGroup.glutes,
+          MuscleGroup.core,
+        ],
+        goal: TrainingGoal.muscleGain,
+        suitability: 9,
+        sets: 4,
+        reps: 10,
+        duration: 55,
+      ),
+      _exercise(
+        id: 'resistance_band_row',
+        name: 'Resistance Band Row',
+        description: 'Horizontal pulling movement using a resistance band.',
+        equipment: Equipment.resistanceBand,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.back,
+          MuscleGroup.arms,
+        ],
+        goal: TrainingGoal.strengthIncrease,
+        suitability: 8,
+        sets: 5,
+        reps: 10,
+        duration: 50,
+      ),
+      _exercise(
+        id: 'incline_pushup',
+        name: 'Incline Push-up',
+        description: 'Upper-body pressing with reduced load and higher volume.',
+        equipment: Equipment.none,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.chest,
+          MuscleGroup.arms,
+          MuscleGroup.shoulders,
+        ],
+        goal: TrainingGoal.enduranceIncrease,
+        suitability: 8,
+        sets: 4,
+        reps: 16,
+        duration: 40,
+      ),
+      _exercise(
+        id: 'walking_lunges',
+        name: 'Walking Lunges',
+        description: 'Continuous lunge pattern with strong leg/cardio demand.',
+        equipment: Equipment.none,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.legs,
+          MuscleGroup.glutes,
+        ],
+        goal: TrainingGoal.weightLoss,
+        suitability: 9,
+        sets: 4,
+        reps: 20,
+        duration: 40,
+      ),
+      _exercise(
+        id: 'high_knees',
+        name: 'High Knees',
+        description: 'Fast, in-place running drill for cardio conditioning.',
+        equipment: Equipment.none,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.legs,
+          MuscleGroup.core,
+          MuscleGroup.fullBody,
+        ],
+        goal: TrainingGoal.enduranceIncrease,
+        suitability: 9,
+        sets: 5,
+        reps: 28,
+        duration: 35,
+      ),
+      _exercise(
+        id: 'romanian_deadlift',
+        name: 'Romanian Deadlift',
+        description: 'Hip hinge pattern focused on hamstrings and glutes.',
+        equipment: Equipment.barbell,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.glutes,
+          MuscleGroup.back,
+          MuscleGroup.legs,
+        ],
+        goal: TrainingGoal.strengthIncrease,
+        suitability: 9,
+        sets: 5,
+        reps: 6,
+        duration: 65,
+      ),
+      _exercise(
+        id: 'dumbbell_row',
+        name: 'Dumbbell Row',
+        description: 'Unilateral row to build upper-back and arm strength.',
+        equipment: Equipment.dumbbells,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.back,
+          MuscleGroup.arms,
+        ],
+        goal: TrainingGoal.muscleGain,
+        suitability: 9,
+        sets: 4,
+        reps: 10,
+        duration: 50,
+      ),
+      _exercise(
+        id: 'lateral_raises',
+        name: 'Lateral Raises',
+        description: 'Shoulder isolation movement for deltoid development.',
+        equipment: Equipment.dumbbells,
+        targetMuscleGroups: const <MuscleGroup>[MuscleGroup.shoulders],
+        goal: TrainingGoal.muscleGain,
+        suitability: 8,
+        sets: 4,
+        reps: 14,
+        duration: 40,
+      ),
+      _exercise(
+        id: 'hip_thrust',
+        name: 'Hip Thrust',
+        description: 'Powerful glute-focused lift with barbell loading.',
+        equipment: Equipment.barbell,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.glutes,
+          MuscleGroup.core,
+        ],
+        goal: TrainingGoal.strengthIncrease,
+        suitability: 9,
+        sets: 5,
+        reps: 8,
+        duration: 60,
+      ),
+      _exercise(
+        id: 'farmer_carry',
+        name: 'Farmer Carry',
+        description:
+            'Loaded carry improving grip, core, and total-body stamina.',
+        equipment: Equipment.dumbbells,
+        targetMuscleGroups: const <MuscleGroup>[
+          MuscleGroup.core,
+          MuscleGroup.arms,
+          MuscleGroup.fullBody,
+        ],
+        goal: TrainingGoal.enduranceIncrease,
+        suitability: 8,
+        sets: 4,
+        reps: 1,
+        duration: 50,
       ),
     ];
   }

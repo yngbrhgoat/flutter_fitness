@@ -22,7 +22,7 @@ class AppRepository {
     return List<Exercise>.from(exercises);
   }
 
-  /// Adds an exercise after validating per-goal configuration constraints.
+  /// Adds an exercise after validating single-goal configuration constraints.
   Future<void> addExercise({required final Exercise exercise}) async {
     _validateExerciseConfiguration(exercise);
     await _dataSource.addExercise(exercise);
@@ -35,7 +35,7 @@ class AppRepository {
   }
 
   /// Logs in an existing user or creates a new profile.
-  Future<UserProfile> loginOrCreateUser({required final String username}) {
+  Future<LoginResult> loginOrCreateUser({required final String username}) {
     return _dataSource.loginOrCreateUser(username: username);
   }
 
@@ -63,49 +63,23 @@ class AppRepository {
   }
 
   void _validateExerciseConfiguration(final Exercise exercise) {
-    int suitableGoalCount = 0;
-    for (final TrainingGoal goal in TrainingGoal.values) {
-      final GoalConfiguration configuration = exercise.configurationForGoal(
-        goal,
+    final GoalConfiguration configuration = exercise.goalConfiguration;
+    final bool hasInvalidSuitability =
+        configuration.suitabilityRating < 1 ||
+        configuration.suitabilityRating > 10;
+    if (hasInvalidSuitability) {
+      throw FormatException(
+        'Suitability for ${exercise.goal.label} must be between 1 and 10.',
       );
-      if (configuration.isSuitable) {
-        suitableGoalCount += 1;
-      }
-      final bool hasInvalidSuitability =
-          configuration.suitabilityRating < 0 ||
-          configuration.suitabilityRating > 10;
-      if (hasInvalidSuitability) {
-        throw FormatException(
-          'Suitability for ${goal.label} must be between 0 and 10.',
-        );
-      }
-
-      if (configuration.suitabilityRating == 0) {
-        final bool hasNonZeroFields =
-            configuration.recommendedSets != 0 ||
-            configuration.recommendedRepetitions != 0 ||
-            configuration.recommendedDurationSeconds != 0;
-        if (hasNonZeroFields) {
-          throw FormatException(
-            'All recommended values for ${goal.label} must be 0 when suitability is 0.',
-          );
-        }
-      } else {
-        final bool hasMissingValues =
-            configuration.recommendedSets <= 0 ||
-            configuration.recommendedRepetitions <= 0 ||
-            configuration.recommendedDurationSeconds <= 0;
-        if (hasMissingValues) {
-          throw FormatException(
-            'Recommended values for ${goal.label} must be greater than 0 when suitability is positive.',
-          );
-        }
-      }
     }
 
-    if (suitableGoalCount != 1) {
-      throw const FormatException(
-        'An exercise must be suitable for exactly one training goal.',
+    final bool hasMissingValues =
+        configuration.recommendedSets <= 0 ||
+        configuration.recommendedRepetitions <= 0 ||
+        configuration.recommendedDurationSeconds <= 0;
+    if (hasMissingValues) {
+      throw FormatException(
+        'Recommended values for ${exercise.goal.label} must be greater than 0.',
       );
     }
   }

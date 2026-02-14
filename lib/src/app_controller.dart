@@ -35,6 +35,7 @@ class AppController extends ChangeNotifier {
   String? _errorMessage;
 
   UserProfile? _currentUser;
+  bool _requiresPrimaryGoalOnboarding = false;
   List<UserProfile> _recentUsers = <UserProfile>[];
   List<Exercise> _exercises = <Exercise>[];
   List<TrainingSession> _sessions = <TrainingSession>[];
@@ -50,6 +51,9 @@ class AppController extends ChangeNotifier {
 
   /// Currently logged in user.
   UserProfile? get currentUser => _currentUser;
+
+  /// Whether the current user must complete first-login goal selection.
+  bool get requiresPrimaryGoalOnboarding => _requiresPrimaryGoalOnboarding;
 
   /// Active user's preferred goal fallback for defaults.
   TrainingGoal get preferredGoal {
@@ -102,7 +106,11 @@ class AppController extends ChangeNotifier {
     _errorMessage = null;
 
     try {
-      _currentUser = await _repository.loginOrCreateUser(username: normalized);
+      final LoginResult loginResult = await _repository.loginOrCreateUser(
+        username: normalized,
+      );
+      _currentUser = loginResult.user;
+      _requiresPrimaryGoalOnboarding = loginResult.isNewUser;
       _recentUsers = await _repository.getRecentUsers(limit: 3);
       _sessions = await _repository.getSessionsForUser(
         userId: _currentUser!.id,
@@ -122,6 +130,7 @@ class AppController extends ChangeNotifier {
   /// Logs out and clears user-specific state.
   void logout() {
     _currentUser = null;
+    _requiresPrimaryGoalOnboarding = false;
     _sessions = <TrainingSession>[];
     _errorMessage = null;
     notifyListeners();
@@ -129,7 +138,14 @@ class AppController extends ChangeNotifier {
 
   /// Updates current user's primary goal and refreshes visible user lists.
   Future<void> updateCurrentUserPrimaryGoal(final TrainingGoal goal) async {
-    if (_currentUser == null || _currentUser!.primaryGoal == goal) {
+    if (_currentUser == null) {
+      return;
+    }
+    if (_currentUser!.primaryGoal == goal) {
+      if (_requiresPrimaryGoalOnboarding) {
+        _requiresPrimaryGoalOnboarding = false;
+        notifyListeners();
+      }
       return;
     }
 
@@ -142,6 +158,7 @@ class AppController extends ChangeNotifier {
       );
       _currentUser = updated;
       _recentUsers = await _repository.getRecentUsers(limit: 3);
+      _requiresPrimaryGoalOnboarding = false;
     } catch (error) {
       _errorMessage = error.toString();
     } finally {

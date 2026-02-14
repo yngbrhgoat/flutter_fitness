@@ -30,12 +30,38 @@ void main() {
     await tester.pumpWidget(TrainingApp(controller: controller));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).first, 'new_user');
+    await tester.enterText(find.byType(TextField).first, 'alex');
     await tester.tap(find.text('Login / Create Profile'));
     await tester.pumpAndSettle();
 
     expect(find.text('Browse Exercises'), findsWidgets);
-    expect(find.text('Training Recommendations'), findsOneWidget);
+    expect(find.text('Start Workout'), findsOneWidget);
     expect(find.text('Training History'), findsOneWidget);
+  });
+
+  testWidgets('prompts primary goal onboarding for new users', (
+    final WidgetTester tester,
+  ) async {
+    final AppController controller = AppController(
+      repository: AppRepository(dataSource: MockBackendDataSource.seeded()),
+    );
+
+    await tester.pumpWidget(TrainingApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'new_user');
+    await tester.tap(find.text('Login / Create Profile'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose Primary Goal'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
+
+    await tester.tap(find.text('Weight Loss'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Browse Exercises'), findsWidgets);
+    expect(find.text('Start Workout'), findsOneWidget);
   });
 }

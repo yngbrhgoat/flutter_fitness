@@ -47,7 +47,7 @@ class RestBackendDataSource implements BackendDataSource {
   }
 
   @override
-  Future<UserProfile> loginOrCreateUser({required final String username}) {
+  Future<LoginResult> loginOrCreateUser({required final String username}) {
     throw UnimplementedError(
       'REST backend is not wired in this template. '
       'Configure API calls to $baseUrl/login.',

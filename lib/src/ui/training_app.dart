@@ -101,6 +101,10 @@ class _TrainingAppState extends State<TrainingApp> {
             return LoginScreen(controller: widget.controller);
           }
 
+          if (widget.controller.requiresPrimaryGoalOnboarding) {
+            return PrimaryGoalOnboardingScreen(controller: widget.controller);
+          }
+
           return ExerciseBrowserScreen(controller: widget.controller);
         },
       ),
@@ -226,7 +230,111 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-enum _MainSection { browse, recommendations, history }
+/// First-login screen requiring a goal selection before entering the app.
+class PrimaryGoalOnboardingScreen extends StatefulWidget {
+  /// Creates the goal onboarding screen.
+  const PrimaryGoalOnboardingScreen({required this.controller, super.key});
+
+  /// Shared app controller.
+  final AppController controller;
+
+  @override
+  State<PrimaryGoalOnboardingScreen> createState() =>
+      _PrimaryGoalOnboardingScreenState();
+}
+
+class _PrimaryGoalOnboardingScreenState
+    extends State<PrimaryGoalOnboardingScreen> {
+  late TrainingGoal _selectedGoal;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedGoal = widget.controller.preferredGoal;
+  }
+
+  Future<void> _continue() async {
+    await widget.controller.updateCurrentUserPrimaryGoal(_selectedGoal);
+    if (!mounted || widget.controller.errorMessage == null) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(widget.controller.errorMessage!)));
+  }
+
+  @override
+  Widget build(final BuildContext context) {
+    final String username = widget.controller.currentUser?.username ?? 'User';
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('Choose Primary Goal'),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  'Welcome, $username',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select your primary training goal to personalize exercises and workouts.',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: TrainingGoal.values
+                      .map((final TrainingGoal goal) {
+                        final bool selected = goal == _selectedGoal;
+                        return ChoiceChip(
+                          selected: selected,
+                          label: Text(goal.label),
+                          onSelected: (final bool value) {
+                            if (!value) {
+                              return;
+                            }
+                            setState(() {
+                              _selectedGoal = goal;
+                            });
+                          },
+                        );
+                      })
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: widget.controller.isBusy ? null : _continue,
+                    child: widget.controller.isBusy
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : const Text('Continue'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _MainSection { browse, startWorkout, history }
+
+enum _TopBarAction { profileSettings, switchUser }
 
 class _TopSectionMenu extends StatelessWidget implements PreferredSizeWidget {
   const _TopSectionMenu({
@@ -238,43 +346,81 @@ class _TopSectionMenu extends StatelessWidget implements PreferredSizeWidget {
   final _MainSection currentSection;
 
   @override
-  Size get preferredSize => const Size.fromHeight(62);
+  Size get preferredSize => const Size.fromHeight(76);
 
   @override
   Widget build(final BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: SegmentedButton<_MainSection>(
-        showSelectedIcon: false,
-        segments: const <ButtonSegment<_MainSection>>[
-          ButtonSegment<_MainSection>(
-            value: _MainSection.browse,
-            icon: Icon(Icons.fitness_center),
-            label: Text('Browse Exercises'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: SegmentedButton<_MainSection>(
+              showSelectedIcon: false,
+              segments: const <ButtonSegment<_MainSection>>[
+                ButtonSegment<_MainSection>(
+                  value: _MainSection.browse,
+                  icon: Icon(Icons.fitness_center),
+                  label: Text('Browse Exercises'),
+                ),
+                ButtonSegment<_MainSection>(
+                  value: _MainSection.startWorkout,
+                  icon: Icon(Icons.play_circle_fill),
+                  label: Text('Start Workout'),
+                ),
+                ButtonSegment<_MainSection>(
+                  value: _MainSection.history,
+                  icon: Icon(Icons.history),
+                  label: Text('Training History'),
+                ),
+              ],
+              selected: <_MainSection>{currentSection},
+              onSelectionChanged: (final Set<_MainSection> selection) {
+                if (selection.isEmpty) {
+                  return;
+                }
+                _navigateToSection(
+                  context: context,
+                  controller: controller,
+                  currentSection: currentSection,
+                  nextSection: selection.first,
+                );
+              },
+            ),
           ),
-          ButtonSegment<_MainSection>(
-            value: _MainSection.recommendations,
-            icon: Icon(Icons.auto_graph),
-            label: Text('Training Recommendations'),
-          ),
-          ButtonSegment<_MainSection>(
-            value: _MainSection.history,
-            icon: Icon(Icons.history),
-            label: Text('Training History'),
+          const SizedBox(width: 8),
+          PopupMenuButton<_TopBarAction>(
+            tooltip: 'Account',
+            onSelected: (final _TopBarAction action) {
+              switch (action) {
+                case _TopBarAction.profileSettings:
+                  unawaited(
+                    _showProfileSettings(
+                      context: context,
+                      controller: controller,
+                    ),
+                  );
+                  break;
+                case _TopBarAction.switchUser:
+                  controller.logout();
+                  break;
+              }
+            },
+            itemBuilder: (final BuildContext context) {
+              return const <PopupMenuEntry<_TopBarAction>>[
+                PopupMenuItem<_TopBarAction>(
+                  value: _TopBarAction.profileSettings,
+                  child: Text('Profile & Settings'),
+                ),
+                PopupMenuItem<_TopBarAction>(
+                  value: _TopBarAction.switchUser,
+                  child: Text('Switch User'),
+                ),
+              ];
+            },
+            icon: const Icon(Icons.account_circle),
           ),
         ],
-        selected: <_MainSection>{currentSection},
-        onSelectionChanged: (final Set<_MainSection> selection) {
-          if (selection.isEmpty) {
-            return;
-          }
-          _navigateToSection(
-            context: context,
-            controller: controller,
-            currentSection: currentSection,
-            nextSection: selection.first,
-          );
-        },
       ),
     );
   }
@@ -292,9 +438,7 @@ void _navigateToSection({
 
   final Widget destination = switch (nextSection) {
     _MainSection.browse => ExerciseBrowserScreen(controller: controller),
-    _MainSection.recommendations => RecommendationScreen(
-      controller: controller,
-    ),
+    _MainSection.startWorkout => RecommendationScreen(controller: controller),
     _MainSection.history => HistoryScreen(controller: controller),
   };
 
@@ -384,29 +528,6 @@ Future<void> _runLiveTrainingFlow({
   );
 }
 
-Future<void> _startWorkoutNow({
-  required final BuildContext context,
-  required final AppController controller,
-}) async {
-  final TrainingGoal goal = controller.preferredGoal;
-  final List<RecommendationEntry> recommendations = controller
-      .buildRecommendations(goal: goal)
-      .toList(growable: false);
-  final List<Exercise> selected = _selectExercisesWithinBudget(
-    recommendations: recommendations,
-    maxMinutes: 30,
-    goal: goal,
-    restSeconds: 45,
-  );
-  await _runLiveTrainingFlow(
-    context: context,
-    controller: controller,
-    goal: goal,
-    exercises: selected,
-    restSecondsBetweenSets: 45,
-  );
-}
-
 Future<void> _showProfileSettings({
   required final BuildContext context,
   required final AppController controller,
@@ -475,31 +596,6 @@ Future<void> _showProfileSettings({
   );
 }
 
-List<Widget> _buildAppBarActions({
-  required final BuildContext context,
-  required final AppController controller,
-}) {
-  return <Widget>[
-    IconButton(
-      onPressed: () {
-        unawaited(_startWorkoutNow(context: context, controller: controller));
-      },
-      icon: const Icon(Icons.play_circle_fill_rounded),
-      tooltip: 'Start Workout Now',
-    ),
-    IconButton(
-      onPressed: () {
-        unawaited(
-          _showProfileSettings(context: context, controller: controller),
-        );
-      },
-      icon: const Icon(Icons.tune),
-      tooltip: 'Profile & Settings',
-    ),
-    TextButton(onPressed: controller.logout, child: const Text('Switch User')),
-  ];
-}
-
 /// Exercise list + filter screen.
 class ExerciseBrowserScreen extends StatefulWidget {
   /// Creates the exercise browser.
@@ -517,33 +613,117 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
   MuscleGroup? _muscleFilter;
   Equipment? _equipmentFilter;
 
-  List<Exercise> _filtered(
-    final List<Exercise> source,
-    final TrainingGoal goalFilter,
-  ) {
+  List<Exercise> _filtered({
+    required final List<Exercise> source,
+    required final TrainingGoal goalFilter,
+    required final MuscleGroup? muscleFilter,
+    required final Equipment? equipmentFilter,
+  }) {
     return source
         .where((final Exercise exercise) {
-          final bool goalMatches = exercise.assignedGoal == goalFilter;
+          final bool goalMatches = exercise.goal == goalFilter;
           final bool muscleMatches =
-              _muscleFilter == null ||
-              exercise.targetMuscleGroups.contains(_muscleFilter);
+              muscleFilter == null ||
+              exercise.targetMuscleGroups.contains(muscleFilter);
           final bool equipmentMatches =
-              _equipmentFilter == null ||
-              exercise.equipment == _equipmentFilter;
+              equipmentFilter == null || exercise.equipment == equipmentFilter;
           return goalMatches && muscleMatches && equipmentMatches;
         })
         .toList(growable: false);
+  }
+
+  Set<TrainingGoal> _availableGoalOptions({
+    required final List<Exercise> source,
+    required final MuscleGroup? muscleFilter,
+    required final Equipment? equipmentFilter,
+  }) {
+    return source
+        .where(
+          (final Exercise exercise) =>
+              (muscleFilter == null ||
+                  exercise.targetMuscleGroups.contains(muscleFilter)) &&
+              (equipmentFilter == null ||
+                  exercise.equipment == equipmentFilter),
+        )
+        .map((final Exercise exercise) => exercise.goal)
+        .toSet();
+  }
+
+  Set<MuscleGroup> _availableMuscleOptions({
+    required final List<Exercise> source,
+    required final TrainingGoal goalFilter,
+    required final Equipment? equipmentFilter,
+  }) {
+    final Set<MuscleGroup> available = <MuscleGroup>{};
+    for (final Exercise exercise in source) {
+      if (exercise.goal != goalFilter) {
+        continue;
+      }
+      if (equipmentFilter != null && exercise.equipment != equipmentFilter) {
+        continue;
+      }
+      available.addAll(exercise.targetMuscleGroups);
+    }
+    return available;
+  }
+
+  Set<Equipment> _availableEquipmentOptions({
+    required final List<Exercise> source,
+    required final TrainingGoal goalFilter,
+    required final MuscleGroup? muscleFilter,
+  }) {
+    return source
+        .where(
+          (final Exercise exercise) =>
+              exercise.goal == goalFilter &&
+              (muscleFilter == null ||
+                  exercise.targetMuscleGroups.contains(muscleFilter)),
+        )
+        .map((final Exercise exercise) => exercise.equipment)
+        .toSet();
+  }
+
+  void _normalizeDependentFilters({
+    required final List<Exercise> source,
+    required final TrainingGoal goalFilter,
+  }) {
+    final Set<Equipment> availableEquipment = _availableEquipmentOptions(
+      source: source,
+      goalFilter: goalFilter,
+      muscleFilter: _muscleFilter,
+    );
+    if (_equipmentFilter != null &&
+        !availableEquipment.contains(_equipmentFilter)) {
+      _equipmentFilter = null;
+    }
+
+    final Set<MuscleGroup> availableMuscles = _availableMuscleOptions(
+      source: source,
+      goalFilter: goalFilter,
+      equipmentFilter: _equipmentFilter,
+    );
+    if (_muscleFilter != null && !availableMuscles.contains(_muscleFilter)) {
+      _muscleFilter = null;
+    }
+
+    final Set<Equipment> refreshedAvailableEquipment =
+        _availableEquipmentOptions(
+          source: source,
+          goalFilter: goalFilter,
+          muscleFilter: _muscleFilter,
+        );
+    if (_equipmentFilter != null &&
+        !refreshedAvailableEquipment.contains(_equipmentFilter)) {
+      _equipmentFilter = null;
+    }
   }
 
   @override
   Widget build(final BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Browse Exercises'),
-        actions: _buildAppBarActions(
-          context: context,
-          controller: widget.controller,
-        ),
+        toolbarHeight: 0,
+        automaticallyImplyLeading: false,
         bottom: _TopSectionMenu(
           controller: widget.controller,
           currentSection: _MainSection.browse,
@@ -570,12 +750,34 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
       body: AnimatedBuilder(
         animation: widget.controller,
         builder: (final BuildContext context, final Widget? child) {
+          final List<Exercise> allExercises = widget.controller.exercises;
           final TrainingGoal goalFilter =
               _goalFilterOverride ?? widget.controller.preferredGoal;
-          final List<Exercise> filteredExercises = _filtered(
-            widget.controller.exercises,
-            goalFilter,
+          final Set<TrainingGoal> availableGoals = _availableGoalOptions(
+            source: allExercises,
+            muscleFilter: _muscleFilter,
+            equipmentFilter: _equipmentFilter,
           );
+          final Set<MuscleGroup> availableMuscles = _availableMuscleOptions(
+            source: allExercises,
+            goalFilter: goalFilter,
+            equipmentFilter: _equipmentFilter,
+          );
+          final Set<Equipment> availableEquipment = _availableEquipmentOptions(
+            source: allExercises,
+            goalFilter: goalFilter,
+            muscleFilter: _muscleFilter,
+          );
+          final List<Exercise> filteredExercises = _filtered(
+            source: allExercises,
+            goalFilter: goalFilter,
+            muscleFilter: _muscleFilter,
+            equipmentFilter: _equipmentFilter,
+          );
+          final Color disabledColor = Theme.of(
+            context,
+          ).disabledColor.withOpacity(0.85);
+
           return Column(
             children: <Widget>[
               Padding(
@@ -594,13 +796,21 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                           labelText: 'Goal filter',
                         ),
                         items: TrainingGoal.values
-                            .map(
-                              (final TrainingGoal goal) =>
-                                  DropdownMenuItem<TrainingGoal>(
-                                    value: goal,
-                                    child: Text(goal.label),
-                                  ),
-                            )
+                            .map((final TrainingGoal goal) {
+                              final bool enabled = availableGoals.contains(
+                                goal,
+                              );
+                              return DropdownMenuItem<TrainingGoal>(
+                                value: goal,
+                                enabled: enabled,
+                                child: Text(
+                                  goal.label,
+                                  style: enabled
+                                      ? null
+                                      : TextStyle(color: disabledColor),
+                                ),
+                              );
+                            })
                             .toList(growable: false),
                         onChanged: (final TrainingGoal? value) {
                           if (value == null) {
@@ -608,18 +818,12 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                           }
                           setState(() {
                             _goalFilterOverride = value;
+                            _normalizeDependentFilters(
+                              source: allExercises,
+                              goalFilter: value,
+                            );
                           });
                         },
-                      ),
-                    ),
-                    OutlinedButton(
-                      onPressed: () {
-                        setState(() {
-                          _goalFilterOverride = null;
-                        });
-                      },
-                      child: Text(
-                        'Use Primary (${widget.controller.preferredGoal.label})',
                       ),
                     ),
                     SizedBox(
@@ -635,17 +839,29 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                             value: null,
                             child: Text('All groups'),
                           ),
-                          ...MuscleGroup.values.map(
-                            (final MuscleGroup group) =>
-                                DropdownMenuItem<MuscleGroup?>(
-                                  value: group,
-                                  child: Text(group.label),
-                                ),
-                          ),
+                          ...MuscleGroup.values.map((final MuscleGroup group) {
+                            final bool enabled = availableMuscles.contains(
+                              group,
+                            );
+                            return DropdownMenuItem<MuscleGroup?>(
+                              value: group,
+                              enabled: enabled,
+                              child: Text(
+                                group.label,
+                                style: enabled
+                                    ? null
+                                    : TextStyle(color: disabledColor),
+                              ),
+                            );
+                          }),
                         ],
                         onChanged: (final MuscleGroup? value) {
                           setState(() {
                             _muscleFilter = value;
+                            _normalizeDependentFilters(
+                              source: allExercises,
+                              goalFilter: goalFilter,
+                            );
                           });
                         },
                       ),
@@ -663,17 +879,29 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                             value: null,
                             child: Text('All equipment'),
                           ),
-                          ...Equipment.values.map(
-                            (final Equipment equipment) =>
-                                DropdownMenuItem<Equipment?>(
-                                  value: equipment,
-                                  child: Text(equipment.label),
-                                ),
-                          ),
+                          ...Equipment.values.map((final Equipment equipment) {
+                            final bool enabled = availableEquipment.contains(
+                              equipment,
+                            );
+                            return DropdownMenuItem<Equipment?>(
+                              value: equipment,
+                              enabled: enabled,
+                              child: Text(
+                                equipment.label,
+                                style: enabled
+                                    ? null
+                                    : TextStyle(color: disabledColor),
+                              ),
+                            );
+                          }),
                         ],
                         onChanged: (final Equipment? value) {
                           setState(() {
                             _equipmentFilter = value;
+                            _normalizeDependentFilters(
+                              source: allExercises,
+                              goalFilter: goalFilter,
+                            );
                           });
                         },
                       ),
@@ -694,7 +922,7 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                       child: ListTile(
                         title: Text(exercise.name),
                         subtitle: Text(
-                          '${exercise.assignedGoal?.label ?? '-'} • '
+                          '${exercise.goal.label} • '
                           '${exercise.equipment.label} • '
                           '${exercise.targetMuscleGroups.map((final MuscleGroup group) => group.label).join(', ')}',
                         ),
@@ -721,7 +949,7 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
   }
 }
 
-/// Exercise detail view with all goal-specific parameters.
+/// Exercise detail view.
 class ExerciseDetailScreen extends StatelessWidget {
   /// Creates an exercise detail screen.
   const ExerciseDetailScreen({required this.exercise, super.key});
@@ -750,39 +978,35 @@ class ExerciseDetailScreen extends StatelessWidget {
             '${exercise.targetMuscleGroups.map((final MuscleGroup group) => group.label).join(', ')}',
           ),
           const SizedBox(height: 16),
-          Text(
-            'Goal configurations',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Goal setup', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          ...TrainingGoal.values.map((final TrainingGoal goal) {
-            final GoalConfiguration config = exercise.configurationForGoal(
-              goal,
-            );
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      goal.label,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 6),
-                    Text('Suitability: ${config.suitabilityRating}/10'),
-                    Text('Recommended sets: ${config.recommendedSets}'),
-                    Text(
-                      'Recommended repetitions: ${config.recommendedRepetitions}',
-                    ),
-                    Text(
-                      'Recommended duration: ${config.recommendedDurationSeconds}s',
-                    ),
-                  ],
-                ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    exercise.goal.label,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Suitability: ${exercise.goalConfiguration.suitabilityRating}/10',
+                  ),
+                  Text(
+                    'Recommended sets: ${exercise.goalConfiguration.recommendedSets}',
+                  ),
+                  Text(
+                    'Recommended repetitions: ${exercise.goalConfiguration.recommendedRepetitions}',
+                  ),
+                  Text(
+                    'Recommended duration: ${exercise.goalConfiguration.recommendedDurationSeconds}s',
+                  ),
+                ],
               ),
-            );
-          }),
+            ),
+          ),
         ],
       ),
     );
@@ -806,30 +1030,33 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _mediaUrlController = TextEditingController();
+  final TextEditingController _suitabilityController = TextEditingController(
+    text: '8',
+  );
+  final TextEditingController _setsController = TextEditingController(
+    text: '4',
+  );
+  final TextEditingController _repetitionsController = TextEditingController(
+    text: '10',
+  );
+  final TextEditingController _durationController = TextEditingController(
+    text: '45',
+  );
 
   Equipment _selectedEquipment = Equipment.none;
+  TrainingGoal _selectedGoal = TrainingGoal.muscleGain;
   final Set<MuscleGroup> _selectedMuscles = <MuscleGroup>{};
   bool _showMuscleError = false;
-
-  late final Map<TrainingGoal, _GoalInputControllers> _goalControllers;
-
-  @override
-  void initState() {
-    super.initState();
-    _goalControllers = <TrainingGoal, _GoalInputControllers>{
-      for (final TrainingGoal goal in TrainingGoal.values)
-        goal: _GoalInputControllers(),
-    };
-  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
     _mediaUrlController.dispose();
-    for (final _GoalInputControllers controllers in _goalControllers.values) {
-      controllers.dispose();
-    }
+    _suitabilityController.dispose();
+    _setsController.dispose();
+    _repetitionsController.dispose();
+    _durationController.dispose();
     super.dispose();
   }
 
@@ -865,64 +1092,10 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
       return;
     }
 
-    final Map<TrainingGoal, GoalConfiguration> configurations =
-        <TrainingGoal, GoalConfiguration>{};
-    int suitableGoalCount = 0;
-
-    for (final TrainingGoal goal in TrainingGoal.values) {
-      final _GoalInputControllers controllers = _goalControllers[goal]!;
-      final int suitability = int.parse(controllers.suitability.text.trim());
-      final int sets = int.parse(controllers.sets.text.trim());
-      final int repetitions = int.parse(controllers.repetitions.text.trim());
-      final int duration = int.parse(controllers.duration.text.trim());
-
-      if (suitability == 0) {
-        final bool hasNonZeroValues =
-            sets != 0 || repetitions != 0 || duration != 0;
-        if (hasNonZeroValues) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${goal.label}: sets/repetitions/duration must be 0 when suitability is 0.',
-              ),
-            ),
-          );
-          return;
-        }
-      } else {
-        final bool hasMissingValues =
-            sets <= 0 || repetitions <= 0 || duration <= 0;
-        if (hasMissingValues) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${goal.label}: sets/repetitions/duration must be > 0 when suitability > 0.',
-              ),
-            ),
-          );
-          return;
-        }
-      }
-
-      if (suitability > 0) {
-        suitableGoalCount += 1;
-      }
-      configurations[goal] = GoalConfiguration(
-        suitabilityRating: suitability,
-        recommendedSets: sets,
-        recommendedRepetitions: repetitions,
-        recommendedDurationSeconds: duration,
-      );
-    }
-
-    if (suitableGoalCount != 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Each exercise must be assigned to exactly one goal.'),
-        ),
-      );
-      return;
-    }
+    final int suitability = int.parse(_suitabilityController.text.trim());
+    final int sets = int.parse(_setsController.text.trim());
+    final int repetitions = int.parse(_repetitionsController.text.trim());
+    final int duration = int.parse(_durationController.text.trim());
 
     final Exercise exercise = Exercise(
       id: 'exercise_${DateTime.now().microsecondsSinceEpoch}',
@@ -933,7 +1106,13 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
           : _mediaUrlController.text.trim(),
       equipment: _selectedEquipment,
       targetMuscleGroups: _selectedMuscles.toList(growable: false),
-      goalConfigurations: configurations,
+      goal: _selectedGoal,
+      goalConfiguration: GoalConfiguration(
+        suitabilityRating: suitability,
+        recommendedSets: sets,
+        recommendedRepetitions: repetitions,
+        recommendedDurationSeconds: duration,
+      ),
     );
 
     await widget.controller.addExercise(exercise);
@@ -1010,6 +1189,27 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
                 });
               },
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<TrainingGoal>(
+              initialValue: _selectedGoal,
+              decoration: const InputDecoration(labelText: 'Assigned goal'),
+              items: TrainingGoal.values
+                  .map(
+                    (final TrainingGoal goal) => DropdownMenuItem<TrainingGoal>(
+                      value: goal,
+                      child: Text(goal.label),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (final TrainingGoal? value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() {
+                  _selectedGoal = value;
+                });
+              },
+            ),
             const SizedBox(height: 16),
             Text(
               'Target muscle groups',
@@ -1048,92 +1248,71 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
               ),
             const SizedBox(height: 20),
             Text(
-              'Goal configuration',
+              'Goal guidance',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Set suitability > 0 for exactly one goal. All others must stay 0.',
+            TextFormField(
+              controller: _suitabilityController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Suitability (1-10)',
+              ),
+              validator: (final String? value) {
+                return _validateRequiredInt(
+                  value,
+                  fieldName: 'Suitability',
+                  min: 1,
+                  max: 10,
+                );
+              },
             ),
             const SizedBox(height: 8),
-            ...TrainingGoal.values.map((final TrainingGoal goal) {
-              final _GoalInputControllers controllers = _goalControllers[goal]!;
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        goal.label,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: controllers.suitability,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Suitability (0-10)',
-                        ),
-                        validator: (final String? value) {
-                          return _validateRequiredInt(
-                            value,
-                            fieldName: '${goal.label} suitability',
-                            min: 0,
-                            max: 10,
-                          );
-                        },
-                      ),
-                      TextFormField(
-                        controller: controllers.sets,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Recommended sets',
-                        ),
-                        validator: (final String? value) {
-                          return _validateRequiredInt(
-                            value,
-                            fieldName: '${goal.label} sets',
-                            min: 0,
-                            max: 99,
-                          );
-                        },
-                      ),
-                      TextFormField(
-                        controller: controllers.repetitions,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Recommended repetitions',
-                        ),
-                        validator: (final String? value) {
-                          return _validateRequiredInt(
-                            value,
-                            fieldName: '${goal.label} repetitions',
-                            min: 0,
-                            max: 999,
-                          );
-                        },
-                      ),
-                      TextFormField(
-                        controller: controllers.duration,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Recommended duration (seconds)',
-                        ),
-                        validator: (final String? value) {
-                          return _validateRequiredInt(
-                            value,
-                            fieldName: '${goal.label} duration',
-                            min: 0,
-                            max: 9999,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
+            TextFormField(
+              controller: _setsController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Recommended sets'),
+              validator: (final String? value) {
+                return _validateRequiredInt(
+                  value,
+                  fieldName: 'Recommended sets',
+                  min: 1,
+                  max: 99,
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _repetitionsController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Recommended repetitions',
+              ),
+              validator: (final String? value) {
+                return _validateRequiredInt(
+                  value,
+                  fieldName: 'Recommended repetitions',
+                  min: 1,
+                  max: 999,
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _durationController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Recommended duration (seconds)',
+              ),
+              validator: (final String? value) {
+                return _validateRequiredInt(
+                  value,
+                  fieldName: 'Recommended duration',
+                  min: 1,
+                  max: 9999,
+                );
+              },
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: widget.controller.isBusy ? null : _submit,
@@ -1146,7 +1325,7 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
   }
 }
 
-/// Recommendation + workout assembly screen.
+/// Workout assembly screen.
 class RecommendationScreen extends StatefulWidget {
   /// Creates the recommendation screen.
   const RecommendationScreen({required this.controller, super.key});
@@ -1249,14 +1428,11 @@ class _RecommendationScreenState extends State<RecommendationScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Training Recommendations'),
-        actions: _buildAppBarActions(
-          context: context,
-          controller: widget.controller,
-        ),
+        toolbarHeight: 0,
+        automaticallyImplyLeading: false,
         bottom: _TopSectionMenu(
           controller: widget.controller,
-          currentSection: _MainSection.recommendations,
+          currentSection: _MainSection.startWorkout,
         ),
       ),
       body: Padding(
@@ -1520,6 +1696,7 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
   int _elapsedSetSeconds = 0;
   int _totalElapsedSeconds = 0;
 
+  bool _hasSessionStarted = false;
   bool _isPaused = false;
   bool _inRest = false;
   bool _finished = false;
@@ -1540,11 +1717,9 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
       );
     }
 
-    _sessionStartedAt = DateTime.now();
     unawaited(
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
     );
-    _ticker = Timer.periodic(const Duration(seconds: 1), _onTick);
   }
 
   @override
@@ -1594,7 +1769,7 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
   }
 
   void _onTick(final Timer timer) {
-    if (!mounted || _finished || _isPaused) {
+    if (!mounted || _finished || _isPaused || !_hasSessionStarted) {
       return;
     }
 
@@ -1691,6 +1866,12 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
     if (_finished) {
       return;
     }
+
+    if (!_hasSessionStarted) {
+      Navigator.of(context).pop();
+      return;
+    }
+
     _finished = true;
     _ticker?.cancel();
 
@@ -1726,6 +1907,35 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
     Navigator.of(context).pop(session);
   }
 
+  void _startSession() {
+    if (_hasSessionStarted || _finished) {
+      return;
+    }
+    setState(() {
+      _hasSessionStarted = true;
+      _sessionStartedAt = DateTime.now();
+      _isPaused = false;
+    });
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), _onTick);
+  }
+
+  int _currentExerciseTargetDurationSeconds() {
+    return _currentExercise.estimatedDurationForGoalSeconds(
+      goal: widget.goal,
+      restSecondsBetweenSets: _restSeconds,
+    );
+  }
+
+  double _currentExerciseProgress() {
+    final int targetDuration = _currentExerciseTargetDurationSeconds();
+    if (targetDuration <= 0) {
+      return 0;
+    }
+    final double progress = _currentProgress.durationSeconds / targetDuration;
+    return progress.clamp(0.0, 1.0);
+  }
+
   @override
   Widget build(final BuildContext context) {
     final int expectedRepetition = _currentExpectedRepetition();
@@ -1738,17 +1948,23 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
       completedUnits: _completedSetCountTotal,
       totalUnits: _plannedSetCountTotal,
     );
+    final int currentExerciseElapsedSeconds = _currentProgress.durationSeconds;
+    final int currentExerciseTargetSeconds =
+        _currentExerciseTargetDurationSeconds();
+    final double exerciseProgress = _currentExerciseProgress();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live Mode'),
         actions: <Widget>[
           IconButton(
-            onPressed: () {
-              setState(() {
-                _isPaused = !_isPaused;
-              });
-            },
+            onPressed: !_hasSessionStarted
+                ? null
+                : () {
+                    setState(() {
+                      _isPaused = !_isPaused;
+                    });
+                  },
             icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
             tooltip: _isPaused ? 'Resume' : 'Pause',
           ),
@@ -1759,164 +1975,231 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
+      body: Stack(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                    child: Column(
+                      children: <Widget>[
+                        _CircularExerciseTimer(
+                          progress: exerciseProgress,
+                          elapsedLabel: _formatElapsedClock(
+                            currentExerciseElapsedSeconds,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _inRest
+                              ? 'Rest: $_restRemainingSeconds s remaining'
+                              : 'Set timer: ${_formatElapsedClock(_elapsedSetSeconds)}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Exercise time: ${currentExerciseElapsedSeconds}s / ${currentExerciseTargetSeconds}s',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Exercise ${_currentExerciseIndex + 1} of ${widget.exercises.length}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(value: completionPercent / 100.0),
+                const SizedBox(height: 8),
+                Text(
+                  'Overall progress: ${completionPercent.toStringAsFixed(1)}% • Session: ${_formatElapsedClock(_totalElapsedSeconds)}',
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        _ExerciseMediaPreview(
+                          mediaUrl: _currentExercise.mediaUrl,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _currentExercise.name,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(_currentExercise.description),
+                        const SizedBox(height: 8),
+                        Text('Equipment: ${_currentExercise.equipment.label}'),
+                        Text(
+                          'Muscles: ${_currentExercise.targetMuscleGroups.map((final MuscleGroup group) => group.label).join(', ')}',
+                        ),
+                        Text('Goal: ${widget.goal.label}'),
+                        Text(
+                          'Set $_currentSetNumber of ${_currentConfiguration.recommendedSets}',
+                        ),
+                        Text(
+                          'Repetition $displayedRepetition of ${_currentConfiguration.recommendedRepetitions}',
+                        ),
+                        Text('Set timer: $_elapsedSetSeconds s'),
+                        Text('Tempo: ${_metrics.paceLabel(pace)}'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
                   children: <Widget>[
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            'Elapsed Time',
-                            style: Theme.of(context).textTheme.titleSmall,
+                    ElevatedButton.icon(
+                      onPressed: !_hasSessionStarted || _inRest
+                          ? null
+                          : () {
+                              setState(() {
+                                _completeCurrentSetInternal();
+                              });
+                            },
+                      icon: const Icon(Icons.check),
+                      label: const Text('Next Set'),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: !_hasSessionStarted
+                          ? null
+                          : () {
+                              setState(() {
+                                final bool markSkipped =
+                                    _currentProgress.completedSets == 0;
+                                _moveToNextExerciseInternal(
+                                  markSkipped: markSkipped,
+                                );
+                              });
+                            },
+                      icon: const Icon(Icons.skip_next),
+                      label: const Text('Next Exercise'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: !_hasSessionStarted
+                          ? null
+                          : () {
+                              setState(() {
+                                _moveToNextExerciseInternal(markSkipped: true);
+                              });
+                            },
+                      icon: const Icon(Icons.fast_forward),
+                      label: const Text('Skip Exercise'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: !_hasSessionStarted
+                          ? null
+                          : () {
+                              setState(() {
+                                _isPaused = !_isPaused;
+                              });
+                            },
+                      icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
+                      label: Text(_isPaused ? 'Resume' : 'Pause'),
+                    ),
+                    SizedBox(
+                      width: 180,
+                      child: DropdownButtonFormField<int>(
+                        initialValue: _restSeconds,
+                        decoration: const InputDecoration(
+                          labelText: 'Rest seconds',
+                        ),
+                        items: const <DropdownMenuItem<int>>[
+                          DropdownMenuItem<int>(
+                            value: 30,
+                            child: Text('30 sec'),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _formatElapsedClock(_totalElapsedSeconds),
-                            style: Theme.of(context).textTheme.headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                          DropdownMenuItem<int>(
+                            value: 45,
+                            child: Text('45 sec'),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _inRest
-                                ? 'Rest: $_restRemainingSeconds s remaining'
-                                : 'Set timer: ${_formatElapsedClock(_elapsedSetSeconds)}',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
+                          DropdownMenuItem<int>(
+                            value: 60,
+                            child: Text('60 sec'),
                           ),
                         ],
-                      ),
-                    ),
-                    _PieProgressIndicator(
-                      progress: completionPercent / 100.0,
-                      label:
-                          '${completionPercent.clamp(0, 100).toStringAsFixed(0)}%',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Exercise ${_currentExerciseIndex + 1} of ${widget.exercises.length}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(value: completionPercent / 100.0),
-            const SizedBox(height: 8),
-            Text('Overall progress: ${completionPercent.toStringAsFixed(1)}%'),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _ExerciseMediaPreview(mediaUrl: _currentExercise.mediaUrl),
-                    const SizedBox(height: 10),
-                    Text(
-                      _currentExercise.name,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(_currentExercise.description),
-                    const SizedBox(height: 8),
-                    Text('Equipment: ${_currentExercise.equipment.label}'),
-                    Text(
-                      'Muscles: ${_currentExercise.targetMuscleGroups.map((final MuscleGroup group) => group.label).join(', ')}',
-                    ),
-                    Text('Goal: ${widget.goal.label}'),
-                    Text(
-                      'Set $_currentSetNumber of ${_currentConfiguration.recommendedSets}',
-                    ),
-                    Text(
-                      'Repetition $displayedRepetition of ${_currentConfiguration.recommendedRepetitions}',
-                    ),
-                    Text('Set timer: $_elapsedSetSeconds s'),
-                    Text('Tempo: ${_metrics.paceLabel(pace)}'),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              children: <Widget>[
-                ElevatedButton.icon(
-                  onPressed: _inRest
-                      ? null
-                      : () {
+                        onChanged: (final int? value) {
+                          if (value == null) {
+                            return;
+                          }
                           setState(() {
-                            _completeCurrentSetInternal();
+                            _restSeconds = value;
                           });
                         },
-                  icon: const Icon(Icons.check),
-                  label: const Text('Next Set'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      final bool markSkipped =
-                          _currentProgress.completedSets == 0;
-                      _moveToNextExerciseInternal(markSkipped: markSkipped);
-                    });
-                  },
-                  icon: const Icon(Icons.skip_next),
-                  label: const Text('Next Exercise'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _moveToNextExerciseInternal(markSkipped: true);
-                    });
-                  },
-                  icon: const Icon(Icons.fast_forward),
-                  label: const Text('Skip Exercise'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _isPaused = !_isPaused;
-                    });
-                  },
-                  icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
-                  label: Text(_isPaused ? 'Resume' : 'Pause'),
-                ),
-                SizedBox(
-                  width: 180,
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _restSeconds,
-                    decoration: const InputDecoration(
-                      labelText: 'Rest seconds',
+                      ),
                     ),
-                    items: const <DropdownMenuItem<int>>[
-                      DropdownMenuItem<int>(value: 30, child: Text('30 sec')),
-                      DropdownMenuItem<int>(value: 45, child: Text('45 sec')),
-                      DropdownMenuItem<int>(value: 60, child: Text('60 sec')),
-                    ],
-                    onChanged: (final int? value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        _restSeconds = value;
-                      });
-                    },
-                  ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          if (!_hasSessionStarted)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.12),
+                alignment: Alignment.center,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            Text(
+                              'Ready to start?',
+                              style: Theme.of(context).textTheme.headlineSmall,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'The workout timer starts only after you press the button below.',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: 72,
+                              child: ElevatedButton.icon(
+                                onPressed: _startSession,
+                                icon: const Icon(Icons.play_arrow, size: 30),
+                                label: const Text(
+                                  'Start Workout',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -2052,11 +2335,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(final BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Training History'),
-        actions: _buildAppBarActions(
-          context: context,
-          controller: widget.controller,
-        ),
+        toolbarHeight: 0,
+        automaticallyImplyLeading: false,
         bottom: _TopSectionMenu(
           controller: widget.controller,
           currentSection: _MainSection.history,
@@ -2216,15 +2496,15 @@ class _ExerciseMediaPreview extends StatelessWidget {
   }
 }
 
-class _PieProgressIndicator extends StatelessWidget {
-  const _PieProgressIndicator({
+class _CircularExerciseTimer extends StatelessWidget {
+  const _CircularExerciseTimer({
     required this.progress,
-    required this.label,
-    this.size = 96,
+    required this.elapsedLabel,
+    this.size = 154,
   });
 
   final double progress;
-  final String label;
+  final String elapsedLabel;
   final double size;
 
   @override
@@ -2232,99 +2512,39 @@ class _PieProgressIndicator extends StatelessWidget {
     final double safeProgress = progress.clamp(0.0, 1.0);
     final ColorScheme colors = Theme.of(context).colorScheme;
     return SizedBox(
-      height: size,
       width: size,
+      height: size,
       child: Stack(
         alignment: Alignment.center,
         children: <Widget>[
-          CustomPaint(
-            size: Size.square(size),
-            painter: _PieProgressPainter(
-              progress: safeProgress,
-              progressColor: colors.primary,
-              backgroundColor: colors.primary.withOpacity(0.14),
+          SizedBox(
+            width: size,
+            height: size,
+            child: CircularProgressIndicator(
+              value: safeProgress,
+              strokeWidth: 13,
+              backgroundColor: colors.primary.withOpacity(0.15),
             ),
           ),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                elapsedLabel,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${(safeProgress * 100).toStringAsFixed(0)}%',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
         ],
       ),
     );
-  }
-}
-
-class _PieProgressPainter extends CustomPainter {
-  _PieProgressPainter({
-    required this.progress,
-    required this.progressColor,
-    required this.backgroundColor,
-  });
-
-  final double progress;
-  final Color progressColor;
-  final Color backgroundColor;
-
-  @override
-  void paint(final Canvas canvas, final Size size) {
-    final Rect rect = Offset.zero & size;
-    final Offset center = rect.center;
-    final double radius = math.min(size.width, size.height) / 2;
-
-    final Paint backgroundPaint = Paint()
-      ..color = backgroundColor
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius, backgroundPaint);
-
-    if (progress <= 0) {
-      return;
-    }
-
-    final Paint progressPaint = Paint()
-      ..color = progressColor
-      ..style = PaintingStyle.fill;
-    canvas.drawArc(
-      rect,
-      -math.pi / 2,
-      2 * math.pi * progress,
-      true,
-      progressPaint,
-    );
-
-    final Paint centerPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius * 0.45, centerPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant final _PieProgressPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.progressColor != progressColor ||
-        oldDelegate.backgroundColor != backgroundColor;
-  }
-}
-
-class _GoalInputControllers {
-  _GoalInputControllers()
-    : suitability = TextEditingController(text: '0'),
-      sets = TextEditingController(text: '0'),
-      repetitions = TextEditingController(text: '0'),
-      duration = TextEditingController(text: '0');
-
-  final TextEditingController suitability;
-  final TextEditingController sets;
-  final TextEditingController repetitions;
-  final TextEditingController duration;
-
-  void dispose() {
-    suitability.dispose();
-    sets.dispose();
-    repetitions.dispose();
-    duration.dispose();
   }
 }
 

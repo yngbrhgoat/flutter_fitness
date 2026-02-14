@@ -243,7 +243,8 @@ class Exercise {
     required this.mediaUrl,
     required this.equipment,
     required this.targetMuscleGroups,
-    required this.goalConfigurations,
+    required this.goal,
+    required this.goalConfiguration,
   });
 
   /// Database identifier.
@@ -264,36 +265,24 @@ class Exercise {
   /// Target muscle groups.
   final List<MuscleGroup> targetMuscleGroups;
 
-  /// Per-goal suitability and guidance.
-  final Map<TrainingGoal, GoalConfiguration> goalConfigurations;
+  /// Goal this exercise is designed for.
+  final TrainingGoal goal;
+
+  /// Suitability and guidance for the assigned [goal].
+  final GoalConfiguration goalConfiguration;
 
   /// Returns per-goal configuration.
   GoalConfiguration configurationForGoal(final TrainingGoal goal) {
-    return goalConfigurations[goal] ?? GoalConfiguration.zero();
+    if (this.goal != goal) {
+      return GoalConfiguration.zero();
+    }
+    return goalConfiguration;
   }
 
   /// Returns whether this exercise is suitable for [goal].
   bool isSuitableForGoal(final TrainingGoal goal) {
     return configurationForGoal(goal).isSuitable;
   }
-
-  /// Assigned goal for this exercise when exactly one goal is suitable.
-  TrainingGoal? get assignedGoal {
-    TrainingGoal? match;
-    for (final TrainingGoal goal in TrainingGoal.values) {
-      if (!isSuitableForGoal(goal)) {
-        continue;
-      }
-      if (match != null) {
-        return null;
-      }
-      match = goal;
-    }
-    return match;
-  }
-
-  /// Returns true when this exercise has exactly one suitable goal.
-  bool get hasExactlyOneSuitableGoal => assignedGoal != null;
 
   /// Estimates the total exercise duration in seconds for a goal.
   int estimatedDurationForGoalSeconds({
@@ -324,27 +313,24 @@ class Exercise {
       'target_muscle_groups': targetMuscleGroups
           .map((final MuscleGroup group) => group.apiValue)
           .toList(growable: false),
-      'goal_configurations': <String, dynamic>{
-        for (final MapEntry<TrainingGoal, GoalConfiguration> entry
-            in goalConfigurations.entries)
-          entry.key.apiValue: entry.value.toJson(),
-      },
+      'assigned_goal': goal.apiValue,
+      'goal_configuration': goalConfiguration.toJson(),
     };
   }
 
   /// Deserializes an exercise from JSON.
   factory Exercise.fromJson(final Map<String, dynamic> json) {
-    final Map<String, dynamic> rawConfigurations =
-        json['goal_configurations'] as Map<String, dynamic>? ??
-        <String, dynamic>{};
-    final Map<TrainingGoal, GoalConfiguration> configurations =
-        <TrainingGoal, GoalConfiguration>{
-          for (final MapEntry<String, dynamic> entry
-              in rawConfigurations.entries)
-            trainingGoalFromApiValue(entry.key): GoalConfiguration.fromJson(
-              (entry.value as Map<String, dynamic>?) ?? <String, dynamic>{},
-            ),
-        };
+    final String assignedGoalValue =
+        (json['assigned_goal'] as String?) ??
+        (json['goal'] as String?) ??
+        TrainingGoal.muscleGain.apiValue;
+    final TrainingGoal resolvedGoal = trainingGoalFromApiValue(
+      assignedGoalValue,
+    );
+    final GoalConfiguration resolvedConfiguration = GoalConfiguration.fromJson(
+      (json['goal_configuration'] as Map<String, dynamic>?) ??
+          <String, dynamic>{},
+    );
 
     return Exercise(
       id: json['id'] as String,
@@ -359,9 +345,23 @@ class Exercise {
                     muscleGroupFromApiValue(value as String),
               )
               .toList(growable: false),
-      goalConfigurations: configurations,
+      goal: resolvedGoal,
+      goalConfiguration: resolvedConfiguration,
     );
   }
+}
+
+/// Login result containing user data and first-login state.
+@immutable
+class LoginResult {
+  /// Creates a login result.
+  const LoginResult({required this.user, required this.isNewUser});
+
+  /// User profile returned by login.
+  final UserProfile user;
+
+  /// Whether the login created a brand-new user.
+  final bool isNewUser;
 }
 
 /// User account information.
