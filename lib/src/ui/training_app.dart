@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,7 +32,60 @@ class _TrainingAppState extends State<TrainingApp> {
     return MaterialApp(
       title: 'Training App',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E7A5D)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1E7A5D),
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.white,
+        canvasColor: Colors.white,
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0.5,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFFF5F8F7),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFD9E5E0)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFD9E5E0)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFF1E7A5D), width: 1.3),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF1E7A5D),
+          foregroundColor: Colors.white,
+        ),
         useMaterial3: true,
       ),
       home: AnimatedBuilder(
@@ -47,7 +101,7 @@ class _TrainingAppState extends State<TrainingApp> {
             return LoginScreen(controller: widget.controller);
           }
 
-          return MainMenuScreen(controller: widget.controller);
+          return ExerciseBrowserScreen(controller: widget.controller);
         },
       ),
     );
@@ -172,90 +226,278 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-/// Main navigation screen.
-class MainMenuScreen extends StatelessWidget {
-  /// Creates the main menu.
-  const MainMenuScreen({required this.controller, super.key});
+enum _MainSection { browse, recommendations, history }
 
-  /// Shared app controller.
+class _TopSectionMenu extends StatelessWidget implements PreferredSizeWidget {
+  const _TopSectionMenu({
+    required this.controller,
+    required this.currentSection,
+  });
+
   final AppController controller;
+  final _MainSection currentSection;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(62);
 
   @override
   Widget build(final BuildContext context) {
-    final UserProfile? user = controller.currentUser;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Training App Main Menu'),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () {
-              controller.logout();
-            },
-            child: const Text('Switch User'),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: SegmentedButton<_MainSection>(
+        showSelectedIcon: false,
+        segments: const <ButtonSegment<_MainSection>>[
+          ButtonSegment<_MainSection>(
+            value: _MainSection.browse,
+            icon: Icon(Icons.fitness_center),
+            label: Text('Browse Exercises'),
+          ),
+          ButtonSegment<_MainSection>(
+            value: _MainSection.recommendations,
+            icon: Icon(Icons.auto_graph),
+            label: Text('Training Recommendations'),
+          ),
+          ButtonSegment<_MainSection>(
+            value: _MainSection.history,
+            icon: Icon(Icons.history),
+            label: Text('Training History'),
           ),
         ],
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Text(
-                  'Logged in as: ${user?.username ?? '-'}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (final BuildContext context) {
-                          return ExerciseBrowserScreen(controller: controller);
-                        },
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.fitness_center),
-                  label: const Text('Browse Exercises'),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (final BuildContext context) {
-                          return RecommendationScreen(controller: controller);
-                        },
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.auto_graph),
-                  label: const Text('Training Recommendations'),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (final BuildContext context) {
-                          return HistoryScreen(controller: controller);
-                        },
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.history),
-                  label: const Text('Training History'),
-                ),
-              ],
-            ),
-          ),
-        ),
+        selected: <_MainSection>{currentSection},
+        onSelectionChanged: (final Set<_MainSection> selection) {
+          if (selection.isEmpty) {
+            return;
+          }
+          _navigateToSection(
+            context: context,
+            controller: controller,
+            currentSection: currentSection,
+            nextSection: selection.first,
+          );
+        },
       ),
     );
   }
+}
+
+void _navigateToSection({
+  required final BuildContext context,
+  required final AppController controller,
+  required final _MainSection currentSection,
+  required final _MainSection nextSection,
+}) {
+  if (currentSection == nextSection) {
+    return;
+  }
+
+  final Widget destination = switch (nextSection) {
+    _MainSection.browse => ExerciseBrowserScreen(controller: controller),
+    _MainSection.recommendations => RecommendationScreen(
+      controller: controller,
+    ),
+    _MainSection.history => HistoryScreen(controller: controller),
+  };
+
+  Navigator.of(context).pushReplacement(
+    MaterialPageRoute<void>(
+      builder: (final BuildContext context) => destination,
+    ),
+  );
+}
+
+List<Exercise> _selectExercisesWithinBudget({
+  required final List<RecommendationEntry> recommendations,
+  required final int maxMinutes,
+  required final TrainingGoal goal,
+  required final int restSeconds,
+}) {
+  final int maxAllowedSeconds = (math.max(1, maxMinutes) * 60 * 1.1).round();
+  final List<Exercise> selected = <Exercise>[];
+  int total = 0;
+
+  for (final RecommendationEntry recommendation in recommendations) {
+    final Exercise exercise = recommendation.exercise;
+    final int duration = exercise.estimatedDurationForGoalSeconds(
+      goal: goal,
+      restSecondsBetweenSets: restSeconds,
+    );
+    if (duration == 0) {
+      continue;
+    }
+    if (total + duration <= maxAllowedSeconds) {
+      selected.add(exercise);
+      total += duration;
+    }
+  }
+
+  return selected;
+}
+
+Future<void> _runLiveTrainingFlow({
+  required final BuildContext context,
+  required final AppController controller,
+  required final TrainingGoal goal,
+  required final List<Exercise> exercises,
+  required final int restSecondsBetweenSets,
+}) async {
+  if (exercises.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No exercises fit the selected setup.')),
+    );
+    return;
+  }
+
+  final UserProfile? currentUser = controller.currentUser;
+  if (currentUser == null) {
+    return;
+  }
+
+  final TrainingSession? session = await Navigator.of(context)
+      .push<TrainingSession>(
+        MaterialPageRoute<TrainingSession>(
+          builder: (final BuildContext context) {
+            return LiveTrainingScreen(
+              userId: currentUser.id,
+              goal: goal,
+              exercises: List<Exercise>.from(exercises),
+              restSecondsBetweenSets: restSecondsBetweenSets,
+            );
+          },
+        ),
+      );
+
+  if (session == null || !context.mounted) {
+    return;
+  }
+
+  await controller.saveSession(session);
+  if (!context.mounted) {
+    return;
+  }
+
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (final BuildContext context) {
+        return SessionSummaryScreen(session: session);
+      },
+    ),
+  );
+}
+
+Future<void> _startWorkoutNow({
+  required final BuildContext context,
+  required final AppController controller,
+}) async {
+  final TrainingGoal goal = controller.preferredGoal;
+  final List<RecommendationEntry> recommendations = controller
+      .buildRecommendations(goal: goal)
+      .toList(growable: false);
+  final List<Exercise> selected = _selectExercisesWithinBudget(
+    recommendations: recommendations,
+    maxMinutes: 30,
+    goal: goal,
+    restSeconds: 45,
+  );
+  await _runLiveTrainingFlow(
+    context: context,
+    controller: controller,
+    goal: goal,
+    exercises: selected,
+    restSecondsBetweenSets: 45,
+  );
+}
+
+Future<void> _showProfileSettings({
+  required final BuildContext context,
+  required final AppController controller,
+}) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (final BuildContext context) {
+      return AnimatedBuilder(
+        animation: controller,
+        builder: (final BuildContext context, final Widget? child) {
+          final UserProfile? user = controller.currentUser;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Profile & Settings',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text('User: ${user?.username ?? '-'}'),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<TrainingGoal>(
+                  initialValue: controller.preferredGoal,
+                  decoration: const InputDecoration(
+                    labelText: 'Primary training goal',
+                  ),
+                  items: TrainingGoal.values
+                      .map(
+                        (final TrainingGoal goal) =>
+                            DropdownMenuItem<TrainingGoal>(
+                              value: goal,
+                              child: Text(goal.label),
+                            ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (final TrainingGoal? value) {
+                    if (value == null) {
+                      return;
+                    }
+                    unawaited(controller.updateCurrentUserPrimaryGoal(value));
+                  },
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Updates apply immediately to browsing and recommendations.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (controller.isBusy) ...<Widget>[
+                  const SizedBox(height: 8),
+                  const LinearProgressIndicator(),
+                ],
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+List<Widget> _buildAppBarActions({
+  required final BuildContext context,
+  required final AppController controller,
+}) {
+  return <Widget>[
+    IconButton(
+      onPressed: () {
+        unawaited(_startWorkoutNow(context: context, controller: controller));
+      },
+      icon: const Icon(Icons.play_circle_fill_rounded),
+      tooltip: 'Start Workout Now',
+    ),
+    IconButton(
+      onPressed: () {
+        unawaited(
+          _showProfileSettings(context: context, controller: controller),
+        );
+      },
+      icon: const Icon(Icons.tune),
+      tooltip: 'Profile & Settings',
+    ),
+    TextButton(onPressed: controller.logout, child: const Text('Switch User')),
+  ];
 }
 
 /// Exercise list + filter screen.
@@ -271,15 +513,17 @@ class ExerciseBrowserScreen extends StatefulWidget {
 }
 
 class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
-  TrainingGoal? _goalFilter;
+  TrainingGoal? _goalFilterOverride;
   MuscleGroup? _muscleFilter;
   Equipment? _equipmentFilter;
 
-  List<Exercise> _filtered(final List<Exercise> source) {
+  List<Exercise> _filtered(
+    final List<Exercise> source,
+    final TrainingGoal goalFilter,
+  ) {
     return source
         .where((final Exercise exercise) {
-          final bool goalMatches =
-              _goalFilter == null || exercise.isSuitableForGoal(_goalFilter!);
+          final bool goalMatches = exercise.assignedGoal == goalFilter;
           final bool muscleMatches =
               _muscleFilter == null ||
               exercise.targetMuscleGroups.contains(_muscleFilter);
@@ -294,7 +538,17 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
   @override
   Widget build(final BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Exercise Browser')),
+      appBar: AppBar(
+        title: const Text('Browse Exercises'),
+        actions: _buildAppBarActions(
+          context: context,
+          controller: widget.controller,
+        ),
+        bottom: _TopSectionMenu(
+          controller: widget.controller,
+          currentSection: _MainSection.browse,
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final bool? created = await Navigator.of(context).push<bool>(
@@ -316,8 +570,11 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
       body: AnimatedBuilder(
         animation: widget.controller,
         builder: (final BuildContext context, final Widget? child) {
+          final TrainingGoal goalFilter =
+              _goalFilterOverride ?? widget.controller.preferredGoal;
           final List<Exercise> filteredExercises = _filtered(
             widget.controller.exercises,
+            goalFilter,
           );
           return Column(
             children: <Widget>[
@@ -328,36 +585,48 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                   runSpacing: 8,
                   children: <Widget>[
                     SizedBox(
-                      width: 200,
-                      child: DropdownButtonFormField<TrainingGoal?>(
-                        initialValue: _goalFilter,
+                      width: 260,
+                      child: DropdownButtonFormField<TrainingGoal>(
+                        key: ValueKey<TrainingGoal>(goalFilter),
+                        initialValue: goalFilter,
+                        isExpanded: true,
                         decoration: const InputDecoration(
-                          labelText: 'Goal suitability',
+                          labelText: 'Goal filter',
                         ),
-                        items: <DropdownMenuItem<TrainingGoal?>>[
-                          const DropdownMenuItem<TrainingGoal?>(
-                            value: null,
-                            child: Text('All goals'),
-                          ),
-                          ...TrainingGoal.values.map(
-                            (final TrainingGoal goal) =>
-                                DropdownMenuItem<TrainingGoal?>(
-                                  value: goal,
-                                  child: Text(goal.label),
-                                ),
-                          ),
-                        ],
+                        items: TrainingGoal.values
+                            .map(
+                              (final TrainingGoal goal) =>
+                                  DropdownMenuItem<TrainingGoal>(
+                                    value: goal,
+                                    child: Text(goal.label),
+                                  ),
+                            )
+                            .toList(growable: false),
                         onChanged: (final TrainingGoal? value) {
+                          if (value == null) {
+                            return;
+                          }
                           setState(() {
-                            _goalFilter = value;
+                            _goalFilterOverride = value;
                           });
                         },
+                      ),
+                    ),
+                    OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          _goalFilterOverride = null;
+                        });
+                      },
+                      child: Text(
+                        'Use Primary (${widget.controller.preferredGoal.label})',
                       ),
                     ),
                     SizedBox(
                       width: 200,
                       child: DropdownButtonFormField<MuscleGroup?>(
                         initialValue: _muscleFilter,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Muscle group',
                         ),
@@ -385,6 +654,7 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                       width: 200,
                       child: DropdownButtonFormField<Equipment?>(
                         initialValue: _equipmentFilter,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Equipment',
                         ),
@@ -424,6 +694,7 @@ class _ExerciseBrowserScreenState extends State<ExerciseBrowserScreen> {
                       child: ListTile(
                         title: Text(exercise.name),
                         subtitle: Text(
+                          '${exercise.assignedGoal?.label ?? '-'} • '
                           '${exercise.equipment.label} • '
                           '${exercise.targetMuscleGroups.map((final MuscleGroup group) => group.label).join(', ')}',
                         ),
@@ -596,6 +867,7 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
 
     final Map<TrainingGoal, GoalConfiguration> configurations =
         <TrainingGoal, GoalConfiguration>{};
+    int suitableGoalCount = 0;
 
     for (final TrainingGoal goal in TrainingGoal.values) {
       final _GoalInputControllers controllers = _goalControllers[goal]!;
@@ -632,12 +904,24 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
         }
       }
 
+      if (suitability > 0) {
+        suitableGoalCount += 1;
+      }
       configurations[goal] = GoalConfiguration(
         suitabilityRating: suitability,
         recommendedSets: sets,
         recommendedRepetitions: repetitions,
         recommendedDurationSeconds: duration,
       );
+    }
+
+    if (suitableGoalCount != 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Each exercise must be assigned to exactly one goal.'),
+        ),
+      );
+      return;
     }
 
     final Exercise exercise = Exercise(
@@ -767,6 +1051,10 @@ class _AddExerciseScreenState extends State<AddExerciseScreen> {
               'Goal configuration',
               style: Theme.of(context).textTheme.titleMedium,
             ),
+            const SizedBox(height: 4),
+            const Text(
+              'Set suitability > 0 for exactly one goal. All others must stay 0.',
+            ),
             const SizedBox(height: 8),
             ...TrainingGoal.values.map((final TrainingGoal goal) {
               final _GoalInputControllers controllers = _goalControllers[goal]!;
@@ -875,66 +1163,61 @@ class _RecommendationScreenState extends State<RecommendationScreen> {
     text: '30',
   );
 
-  TrainingGoal _selectedGoal = TrainingGoal.muscleGain;
   int _restSeconds = 45;
 
   List<RecommendationEntry> _recommendations = <RecommendationEntry>[];
   List<Exercise> _selectedExercises = <Exercise>[];
 
+  TrainingGoal get _selectedGoal => widget.controller.preferredGoal;
+
+  @override
+  void initState() {
+    super.initState();
+    _maxMinutesController.addListener(_refreshRecommendations);
+    widget.controller.addListener(_handleControllerChange);
+    _refreshRecommendations();
+  }
+
+  void _handleControllerChange() {
+    if (!mounted) {
+      return;
+    }
+    _refreshRecommendations();
+  }
+
   @override
   void dispose() {
+    _maxMinutesController.removeListener(_refreshRecommendations);
+    widget.controller.removeListener(_handleControllerChange);
     _maxMinutesController.dispose();
     super.dispose();
   }
 
   int _readMaxMinutes() {
-    return int.tryParse(_maxMinutesController.text.trim()) ?? 30;
+    final int parsed = int.tryParse(_maxMinutesController.text.trim()) ?? 30;
+    return parsed.clamp(1, 240).toInt();
   }
 
-  List<Exercise> _autoSelectWithinBudget(
-    final List<RecommendationEntry> recommendations,
-    final int maxMinutes,
-  ) {
-    final int maxAllowedSeconds = (maxMinutes * 60 * 1.1).round();
-    final List<Exercise> selected = <Exercise>[];
-    int total = 0;
-
-    for (final RecommendationEntry recommendation in recommendations) {
-      final Exercise exercise = recommendation.exercise;
-      final int duration = exercise.estimatedDurationForGoalSeconds(
-        goal: _selectedGoal,
-        restSecondsBetweenSets: _restSeconds,
-      );
-      if (duration == 0) {
-        continue;
-      }
-      if (total + duration <= maxAllowedSeconds) {
-        selected.add(exercise);
-        total += duration;
-      }
-    }
-
-    return selected;
-  }
-
-  void _generateRecommendations() {
+  void _refreshRecommendations() {
     final int maxMinutes = _readMaxMinutes();
-    if (maxMinutes <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Maximum duration must be greater than 0.'),
-        ),
-      );
-      return;
-    }
-
+    final TrainingGoal goal = _selectedGoal;
     final List<RecommendationEntry> recommendations = widget.controller
-        .buildRecommendations(goal: _selectedGoal)
+        .buildRecommendations(goal: goal)
         .toList(growable: false);
 
+    final List<Exercise> autoSelected = _selectExercisesWithinBudget(
+      recommendations: recommendations,
+      maxMinutes: maxMinutes,
+      goal: goal,
+      restSeconds: _restSeconds,
+    );
+
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _recommendations = recommendations;
-      _selectedExercises = _autoSelectWithinBudget(recommendations, maxMinutes);
+      _selectedExercises = autoSelected;
     });
   }
 
@@ -947,47 +1230,12 @@ class _RecommendationScreenState extends State<RecommendationScreen> {
   }
 
   Future<void> _startTraining() async {
-    if (_selectedExercises.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one exercise.')),
-      );
-      return;
-    }
-
-    final UserProfile? currentUser = widget.controller.currentUser;
-    if (currentUser == null) {
-      return;
-    }
-
-    final TrainingSession? session = await Navigator.of(context)
-        .push<TrainingSession>(
-          MaterialPageRoute<TrainingSession>(
-            builder: (final BuildContext context) {
-              return LiveTrainingScreen(
-                userId: currentUser.id,
-                goal: _selectedGoal,
-                exercises: List<Exercise>.from(_selectedExercises),
-                restSecondsBetweenSets: _restSeconds,
-              );
-            },
-          ),
-        );
-
-    if (!mounted || session == null) {
-      return;
-    }
-
-    await widget.controller.saveSession(session);
-    if (!mounted) {
-      return;
-    }
-
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (final BuildContext context) {
-          return SessionSummaryScreen(session: session);
-        },
-      ),
+    await _runLiveTrainingFlow(
+      context: context,
+      controller: widget.controller,
+      goal: _selectedGoal,
+      exercises: _selectedExercises,
+      restSecondsBetweenSets: _restSeconds,
     );
   }
 
@@ -1000,7 +1248,17 @@ class _RecommendationScreenState extends State<RecommendationScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Training Recommendations')),
+      appBar: AppBar(
+        title: const Text('Training Recommendations'),
+        actions: _buildAppBarActions(
+          context: context,
+          controller: widget.controller,
+        ),
+        bottom: _TopSectionMenu(
+          controller: widget.controller,
+          currentSection: _MainSection.recommendations,
+        ),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -1010,31 +1268,16 @@ class _RecommendationScreenState extends State<RecommendationScreen> {
               spacing: 12,
               runSpacing: 8,
               children: <Widget>[
-                SizedBox(
-                  width: 230,
-                  child: DropdownButtonFormField<TrainingGoal>(
-                    initialValue: _selectedGoal,
-                    decoration: const InputDecoration(
-                      labelText: 'Training goal',
-                    ),
-                    items: TrainingGoal.values
-                        .map(
-                          (final TrainingGoal goal) =>
-                              DropdownMenuItem<TrainingGoal>(
-                                value: goal,
-                                child: Text(goal.label),
-                              ),
-                        )
-                        .toList(growable: false),
-                    onChanged: (final TrainingGoal? value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        _selectedGoal = value;
-                      });
-                    },
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
                   ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: const Color(0xFFF5F8F7),
+                  ),
+                  child: Text('Primary goal: ${_selectedGoal.label}'),
                 ),
                 SizedBox(
                   width: 200,
@@ -1071,15 +1314,10 @@ class _RecommendationScreenState extends State<RecommendationScreen> {
                       if (value == null) {
                         return;
                       }
-                      setState(() {
-                        _restSeconds = value;
-                      });
+                      _restSeconds = value;
+                      _refreshRecommendations();
                     },
                   ),
-                ),
-                ElevatedButton(
-                  onPressed: _generateRecommendations,
-                  child: const Text('Generate'),
                 ),
               ],
             ),
@@ -1094,116 +1332,144 @@ class _RecommendationScreenState extends State<RecommendationScreen> {
               ),
             const SizedBox(height: 8),
             Expanded(
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: ListView.builder(
-                          itemCount: _recommendations.length,
-                          itemBuilder: (final BuildContext context, final int index) {
-                            final RecommendationEntry entry =
-                                _recommendations[index];
-                            final bool selected = _selectedExercises.any(
-                              (final Exercise ex) => ex.id == entry.exercise.id,
-                            );
-                            return CheckboxListTile(
-                              value: selected,
-                              title: Text(entry.exercise.name),
-                              subtitle: Text(
-                                'Score ${entry.finalScore.toStringAsFixed(2)} '
-                                '(Suitability ${entry.suitabilityScore.toStringAsFixed(1)} '
-                                '• Novelty ${entry.noveltyScore.toStringAsFixed(1)})',
+              child: LayoutBuilder(
+                builder: (final BuildContext context, final BoxConstraints constraints) {
+                  final Widget recommendationsPanel = Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: _recommendations.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No matching exercises for your current goal.',
                               ),
-                              onChanged: (final bool? value) {
-                                setState(() {
-                                  if (value == true) {
-                                    _selectedExercises.add(entry.exercise);
-                                  } else {
-                                    _selectedExercises.removeWhere(
-                                      (final Exercise exercise) =>
-                                          exercise.id == entry.exercise.id,
-                                    );
-                                  }
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            Text(
-                              'Selected Order',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            const SizedBox(height: 8),
-                            Expanded(
-                              child: ReorderableListView.builder(
-                                itemCount: _selectedExercises.length,
-                                onReorder:
-                                    (final int oldIndex, final int newIndex) {
-                                      setState(() {
-                                        final int targetIndex =
-                                            oldIndex < newIndex
-                                            ? newIndex - 1
-                                            : newIndex;
-                                        final Exercise moved =
-                                            _selectedExercises.removeAt(
-                                              oldIndex,
+                            )
+                          : ListView.builder(
+                              itemCount: _recommendations.length,
+                              itemBuilder: (final BuildContext context, final int index) {
+                                final RecommendationEntry entry =
+                                    _recommendations[index];
+                                final bool selected = _selectedExercises.any(
+                                  (final Exercise ex) =>
+                                      ex.id == entry.exercise.id,
+                                );
+                                return CheckboxListTile(
+                                  value: selected,
+                                  title: Text(entry.exercise.name),
+                                  subtitle: Text(
+                                    'Score ${entry.finalScore.toStringAsFixed(2)} '
+                                    '(Suitability ${entry.suitabilityScore.toStringAsFixed(1)} '
+                                    '• Novelty ${entry.noveltyScore.toStringAsFixed(1)})',
+                                  ),
+                                  onChanged: (final bool? value) {
+                                    setState(() {
+                                      if (value == true) {
+                                        final bool alreadySelected =
+                                            _selectedExercises.any(
+                                              (final Exercise exercise) =>
+                                                  exercise.id ==
+                                                  entry.exercise.id,
                                             );
-                                        _selectedExercises.insert(
-                                          targetIndex,
-                                          moved,
-                                        );
-                                      });
-                                    },
-                                itemBuilder:
-                                    (
-                                      final BuildContext context,
-                                      final int index,
-                                    ) {
-                                      final Exercise exercise =
-                                          _selectedExercises[index];
-                                      final int estimated = exercise
-                                          .estimatedDurationForGoalSeconds(
-                                            goal: _selectedGoal,
-                                            restSecondsBetweenSets:
-                                                _restSeconds,
+                                        if (!alreadySelected) {
+                                          _selectedExercises.add(
+                                            entry.exercise,
                                           );
-                                      return ListTile(
-                                        key: ValueKey<String>(
-                                          'selected_${exercise.id}',
-                                        ),
-                                        title: Text(exercise.name),
-                                        subtitle: Text(
-                                          '${(estimated / 60).toStringAsFixed(1)} min',
-                                        ),
+                                        }
+                                      } else {
+                                        _selectedExercises.removeWhere(
+                                          (final Exercise exercise) =>
+                                              exercise.id == entry.exercise.id,
+                                        );
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  );
+
+                  final Widget selectedPanel = Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          Text(
+                            'Selected Order',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Expanded(
+                            child: ReorderableListView.builder(
+                              itemCount: _selectedExercises.length,
+                              onReorder:
+                                  (final int oldIndex, final int newIndex) {
+                                    setState(() {
+                                      final int targetIndex =
+                                          oldIndex < newIndex
+                                          ? newIndex - 1
+                                          : newIndex;
+                                      final Exercise moved = _selectedExercises
+                                          .removeAt(oldIndex);
+                                      _selectedExercises.insert(
+                                        targetIndex,
+                                        moved,
                                       );
-                                    },
-                              ),
+                                    });
+                                  },
+                              itemBuilder:
+                                  (
+                                    final BuildContext context,
+                                    final int index,
+                                  ) {
+                                    final Exercise exercise =
+                                        _selectedExercises[index];
+                                    final int estimated = exercise
+                                        .estimatedDurationForGoalSeconds(
+                                          goal: _selectedGoal,
+                                          restSecondsBetweenSets: _restSeconds,
+                                        );
+                                    return ListTile(
+                                      key: ValueKey<String>(
+                                        'selected_${exercise.id}',
+                                      ),
+                                      title: Text(exercise.name),
+                                      subtitle: Text(
+                                        '${(estimated / 60).toStringAsFixed(1)} min',
+                                      ),
+                                    );
+                                  },
                             ),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: _startTraining,
-                              icon: const Icon(Icons.play_arrow),
-                              label: const Text('Start Training'),
-                            ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: _startTraining,
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Start Training'),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                  );
+
+                  if (constraints.maxWidth < 900) {
+                    return Column(
+                      children: <Widget>[
+                        Expanded(child: recommendationsPanel),
+                        const SizedBox(height: 10),
+                        Expanded(child: selectedPanel),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: <Widget>[
+                      Expanded(child: recommendationsPanel),
+                      const SizedBox(width: 10),
+                      Expanded(child: selectedPanel),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -1314,6 +1580,17 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
       total += progress.completedSets;
     }
     return total;
+  }
+
+  String _formatElapsedClock(final int totalSeconds) {
+    final Duration duration = Duration(seconds: math.max(0, totalSeconds));
+    final int hours = duration.inHours;
+    final int minutes = duration.inMinutes.remainder(60);
+    final int seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   void _onTick(final Timer timer) {
@@ -1487,6 +1764,47 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'Elapsed Time',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatElapsedClock(_totalElapsedSeconds),
+                            style: Theme.of(context).textTheme.headlineMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _inRest
+                                ? 'Rest: $_restRemainingSeconds s remaining'
+                                : 'Set timer: ${_formatElapsedClock(_elapsedSetSeconds)}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _PieProgressIndicator(
+                      progress: completionPercent / 100.0,
+                      label:
+                          '${completionPercent.clamp(0, 100).toStringAsFixed(0)}%',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Text(
               'Exercise ${_currentExerciseIndex + 1} of ${widget.exercises.length}',
               style: Theme.of(context).textTheme.titleMedium,
@@ -1524,13 +1842,6 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
                     ),
                     Text('Set timer: $_elapsedSetSeconds s'),
                     Text('Tempo: ${_metrics.paceLabel(pace)}'),
-                    if (_inRest)
-                      Text(
-                        'Rest: $_restRemainingSeconds s remaining',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -1604,11 +1915,6 @@ class _LiveTrainingScreenState extends State<LiveTrainingScreen> {
                 ),
               ],
             ),
-            const Spacer(),
-            Text(
-              'Total elapsed: $_totalElapsedSeconds s',
-              textAlign: TextAlign.center,
-            ),
           ],
         ),
       ),
@@ -1674,7 +1980,7 @@ class SessionSummaryScreen extends StatelessWidget {
                 return route.isFirst;
               });
             },
-            child: const Text('Return to Main Menu'),
+            child: const Text('Return to Home'),
           ),
         ],
       ),
@@ -1706,11 +2012,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _pickStartDate() async {
     final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime initialDate = (_start ?? today).isAfter(today)
+        ? today
+        : (_start ?? today);
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _start ?? now,
+      initialDate: initialDate,
       firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 1),
+      lastDate: today,
     );
     if (picked != null) {
       setState(() {
@@ -1721,11 +2031,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _pickEndDate() async {
     final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime initialDate = (_end ?? today).isAfter(today)
+        ? today
+        : (_end ?? today);
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _end ?? now,
+      initialDate: initialDate,
       firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 1),
+      lastDate: today,
     );
     if (picked != null) {
       setState(() {
@@ -1737,7 +2051,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(final BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Training History')),
+      appBar: AppBar(
+        title: const Text('Training History'),
+        actions: _buildAppBarActions(
+          context: context,
+          controller: widget.controller,
+        ),
+        bottom: _TopSectionMenu(
+          controller: widget.controller,
+          currentSection: _MainSection.history,
+        ),
+      ),
       body: AnimatedBuilder(
         animation: widget.controller,
         builder: (final BuildContext context, final Widget? child) {
@@ -1889,6 +2213,98 @@ class _ExerciseMediaPreview extends StatelessWidget {
             },
       ),
     );
+  }
+}
+
+class _PieProgressIndicator extends StatelessWidget {
+  const _PieProgressIndicator({
+    required this.progress,
+    required this.label,
+    this.size = 96,
+  });
+
+  final double progress;
+  final String label;
+  final double size;
+
+  @override
+  Widget build(final BuildContext context) {
+    final double safeProgress = progress.clamp(0.0, 1.0);
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: size,
+      width: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          CustomPaint(
+            size: Size.square(size),
+            painter: _PieProgressPainter(
+              progress: safeProgress,
+              progressColor: colors.primary,
+              backgroundColor: colors.primary.withOpacity(0.14),
+            ),
+          ),
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PieProgressPainter extends CustomPainter {
+  _PieProgressPainter({
+    required this.progress,
+    required this.progressColor,
+    required this.backgroundColor,
+  });
+
+  final double progress;
+  final Color progressColor;
+  final Color backgroundColor;
+
+  @override
+  void paint(final Canvas canvas, final Size size) {
+    final Rect rect = Offset.zero & size;
+    final Offset center = rect.center;
+    final double radius = math.min(size.width, size.height) / 2;
+
+    final Paint backgroundPaint = Paint()
+      ..color = backgroundColor
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius, backgroundPaint);
+
+    if (progress <= 0) {
+      return;
+    }
+
+    final Paint progressPaint = Paint()
+      ..color = progressColor
+      ..style = PaintingStyle.fill;
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * progress,
+      true,
+      progressPaint,
+    );
+
+    final Paint centerPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius * 0.45, centerPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant final _PieProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.progressColor != progressColor ||
+        oldDelegate.backgroundColor != backgroundColor;
   }
 }
 

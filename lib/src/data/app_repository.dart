@@ -39,6 +39,17 @@ class AppRepository {
     return _dataSource.loginOrCreateUser(username: username);
   }
 
+  /// Updates a user's primary goal and returns the updated profile.
+  Future<UserProfile> updateUserPrimaryGoal({
+    required final String userId,
+    required final TrainingGoal primaryGoal,
+  }) {
+    return _dataSource.updateUserPrimaryGoal(
+      userId: userId,
+      primaryGoal: primaryGoal,
+    );
+  }
+
   /// Returns a user's training history.
   Future<List<TrainingSession>> getSessionsForUser({
     required final String userId,
@@ -52,10 +63,14 @@ class AppRepository {
   }
 
   void _validateExerciseConfiguration(final Exercise exercise) {
+    int suitableGoalCount = 0;
     for (final TrainingGoal goal in TrainingGoal.values) {
       final GoalConfiguration configuration = exercise.configurationForGoal(
         goal,
       );
+      if (configuration.isSuitable) {
+        suitableGoalCount += 1;
+      }
       final bool hasInvalidSuitability =
           configuration.suitabilityRating < 0 ||
           configuration.suitabilityRating > 10;
@@ -86,6 +101,12 @@ class AppRepository {
           );
         }
       }
+    }
+
+    if (suitableGoalCount != 1) {
+      throw const FormatException(
+        'An exercise must be suitable for exactly one training goal.',
+      );
     }
   }
 }

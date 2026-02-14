@@ -61,6 +61,7 @@ class MockBackendDataSource implements BackendDataSource {
       final UserProfile updated = UserProfile(
         id: existingUser.id,
         username: existingUser.username,
+        primaryGoal: existingUser.primaryGoal,
         lastLoginAt: now,
       );
       _usersById[updated.id] = updated;
@@ -72,6 +73,7 @@ class MockBackendDataSource implements BackendDataSource {
     final UserProfile created = UserProfile(
       id: userId,
       username: normalizedUsername,
+      primaryGoal: TrainingGoal.muscleGain,
       lastLoginAt: now,
     );
     _usersById[userId] = created;
@@ -92,6 +94,27 @@ class MockBackendDataSource implements BackendDataSource {
               b.startedAt.compareTo(a.startedAt),
         );
     return sessions;
+  }
+
+  @override
+  Future<UserProfile> updateUserPrimaryGoal({
+    required final String userId,
+    required final TrainingGoal primaryGoal,
+  }) async {
+    final UserProfile? existing = _usersById[userId];
+    if (existing == null) {
+      throw StateError('Unknown user id: $userId');
+    }
+
+    final UserProfile updated = UserProfile(
+      id: existing.id,
+      username: existing.username,
+      primaryGoal: primaryGoal,
+      lastLoginAt: existing.lastLoginAt,
+    );
+    _usersById[userId] = updated;
+    _touchRecentUser(userId);
+    return updated;
   }
 
   @override
@@ -116,16 +139,19 @@ class MockBackendDataSource implements BackendDataSource {
       UserProfile(
         id: 'user_alex',
         username: 'alex',
+        primaryGoal: TrainingGoal.strengthIncrease,
         lastLoginAt: now.subtract(const Duration(days: 1)),
       ),
       UserProfile(
         id: 'user_sam',
         username: 'sam',
+        primaryGoal: TrainingGoal.weightLoss,
         lastLoginAt: now.subtract(const Duration(days: 2)),
       ),
       UserProfile(
         id: 'user_jo',
         username: 'jo',
+        primaryGoal: TrainingGoal.enduranceIncrease,
         lastLoginAt: now.subtract(const Duration(days: 3)),
       ),
     ];
@@ -228,11 +254,28 @@ class MockBackendDataSource implements BackendDataSource {
     required final GoalConfiguration strengthIncrease,
     required final GoalConfiguration enduranceIncrease,
   }) {
+    final Map<TrainingGoal, GoalConfiguration> raw =
+        <TrainingGoal, GoalConfiguration>{
+          TrainingGoal.muscleGain: muscleGain,
+          TrainingGoal.weightLoss: weightLoss,
+          TrainingGoal.strengthIncrease: strengthIncrease,
+          TrainingGoal.enduranceIncrease: enduranceIncrease,
+        };
+
+    TrainingGoal? selectedGoal;
+    int highestSuitability = 0;
+    for (final MapEntry<TrainingGoal, GoalConfiguration> entry in raw.entries) {
+      final int suitability = entry.value.suitabilityRating;
+      if (suitability <= highestSuitability) {
+        continue;
+      }
+      highestSuitability = suitability;
+      selectedGoal = entry.key;
+    }
+
     return <TrainingGoal, GoalConfiguration>{
-      TrainingGoal.muscleGain: muscleGain,
-      TrainingGoal.weightLoss: weightLoss,
-      TrainingGoal.strengthIncrease: strengthIncrease,
-      TrainingGoal.enduranceIncrease: enduranceIncrease,
+      for (final TrainingGoal goal in TrainingGoal.values)
+        goal: goal == selectedGoal ? raw[goal]! : GoalConfiguration.zero(),
     };
   }
 

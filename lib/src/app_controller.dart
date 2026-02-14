@@ -51,6 +51,11 @@ class AppController extends ChangeNotifier {
   /// Currently logged in user.
   UserProfile? get currentUser => _currentUser;
 
+  /// Active user's preferred goal fallback for defaults.
+  TrainingGoal get preferredGoal {
+    return _currentUser?.primaryGoal ?? TrainingGoal.muscleGain;
+  }
+
   /// Recent users for quick login.
   List<UserProfile> get recentUsers => List<UserProfile>.from(_recentUsers);
 
@@ -120,6 +125,28 @@ class AppController extends ChangeNotifier {
     _sessions = <TrainingSession>[];
     _errorMessage = null;
     notifyListeners();
+  }
+
+  /// Updates current user's primary goal and refreshes visible user lists.
+  Future<void> updateCurrentUserPrimaryGoal(final TrainingGoal goal) async {
+    if (_currentUser == null || _currentUser!.primaryGoal == goal) {
+      return;
+    }
+
+    _setBusy(true);
+    _errorMessage = null;
+    try {
+      final UserProfile updated = await _repository.updateUserPrimaryGoal(
+        userId: _currentUser!.id,
+        primaryGoal: goal,
+      );
+      _currentUser = updated;
+      _recentUsers = await _repository.getRecentUsers(limit: 3);
+    } catch (error) {
+      _errorMessage = error.toString();
+    } finally {
+      _setBusy(false);
+    }
   }
 
   /// Refreshes exercise catalog from persistence.

@@ -18,6 +18,7 @@ ON CONFLICT (code) DO NOTHING;
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
+  primary_goal_id SMALLINT NOT NULL REFERENCES training_goals(id) ON DELETE RESTRICT DEFAULT 1,
   last_login_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -71,6 +72,44 @@ CREATE TABLE IF NOT EXISTS exercise_goal_configs (
     (suitability_rating > 0 AND recommended_sets > 0 AND recommended_repetitions > 0 AND recommended_duration_seconds > 0)
   )
 );
+
+CREATE OR REPLACE FUNCTION enforce_single_goal_per_exercise()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  affected_exercise_id BIGINT := COALESCE(NEW.exercise_id, OLD.exercise_id);
+  total_count INTEGER;
+  suitable_count INTEGER;
+BEGIN
+  SELECT
+    COUNT(*),
+    COUNT(*) FILTER (WHERE suitability_rating > 0)
+  INTO total_count, suitable_count
+  FROM exercise_goal_configs
+  WHERE exercise_id = affected_exercise_id;
+
+  IF total_count = 0 THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
+  IF suitable_count <> 1 THEN
+    RAISE EXCEPTION
+      'Exercise % must have exactly one suitable goal configuration, found %.',
+      affected_exercise_id,
+      suitable_count;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_exercise_single_goal ON exercise_goal_configs;
+CREATE CONSTRAINT TRIGGER trg_exercise_single_goal
+AFTER INSERT OR UPDATE OR DELETE ON exercise_goal_configs
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION enforce_single_goal_per_exercise();
 
 CREATE TABLE IF NOT EXISTS training_sessions (
   id BIGSERIAL PRIMARY KEY,

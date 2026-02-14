@@ -55,6 +55,17 @@ class RestBackendDataSource implements BackendDataSource {
   }
 
   @override
+  Future<UserProfile> updateUserPrimaryGoal({
+    required final String userId,
+    required final TrainingGoal primaryGoal,
+  }) {
+    throw UnimplementedError(
+      'REST backend is not wired in this template. '
+      'Configure API calls to $baseUrl/users/$userId/primary-goal.',
+    );
+  }
+
+  @override
   Future<void> saveTrainingSession({required final TrainingSession session}) {
     throw UnimplementedError(
       'REST backend is not wired in this template. '

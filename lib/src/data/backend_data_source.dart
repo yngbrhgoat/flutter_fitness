@@ -14,6 +14,12 @@ abstract class BackendDataSource {
   /// Logs in an existing user or creates a new one.
   Future<UserProfile> loginOrCreateUser({required final String username});
 
+  /// Updates and returns a user's primary training goal.
+  Future<UserProfile> updateUserPrimaryGoal({
+    required final String userId,
+    required final TrainingGoal primaryGoal,
+  });
+
   /// Returns a user's session history.
   Future<List<TrainingSession>> fetchSessionsForUser({
     required final String userId,

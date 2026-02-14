@@ -277,6 +277,24 @@ class Exercise {
     return configurationForGoal(goal).isSuitable;
   }
 
+  /// Assigned goal for this exercise when exactly one goal is suitable.
+  TrainingGoal? get assignedGoal {
+    TrainingGoal? match;
+    for (final TrainingGoal goal in TrainingGoal.values) {
+      if (!isSuitableForGoal(goal)) {
+        continue;
+      }
+      if (match != null) {
+        return null;
+      }
+      match = goal;
+    }
+    return match;
+  }
+
+  /// Returns true when this exercise has exactly one suitable goal.
+  bool get hasExactlyOneSuitableGoal => assignedGoal != null;
+
   /// Estimates the total exercise duration in seconds for a goal.
   int estimatedDurationForGoalSeconds({
     required final TrainingGoal goal,
@@ -353,6 +371,7 @@ class UserProfile {
   const UserProfile({
     required this.id,
     required this.username,
+    required this.primaryGoal,
     required this.lastLoginAt,
   });
 
@@ -362,6 +381,9 @@ class UserProfile {
   /// Username shown in the UI.
   final String username;
 
+  /// Primary goal used for default filtering and recommendations.
+  final TrainingGoal primaryGoal;
+
   /// Last login timestamp.
   final DateTime lastLoginAt;
 
@@ -370,6 +392,7 @@ class UserProfile {
     return <String, dynamic>{
       'id': id,
       'username': username,
+      'primary_goal': primaryGoal.apiValue,
       'last_login_at': lastLoginAt.toIso8601String(),
     };
   }
@@ -379,6 +402,9 @@ class UserProfile {
     return UserProfile(
       id: json['id'] as String,
       username: json['username'] as String,
+      primaryGoal: trainingGoalFromApiValue(
+        (json['primary_goal'] as String?) ?? TrainingGoal.muscleGain.apiValue,
+      ),
       lastLoginAt: DateTime.parse(json['last_login_at'] as String),
     );
   }

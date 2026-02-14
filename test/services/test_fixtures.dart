@@ -32,7 +32,15 @@ Exercise buildExercise({
   required final String id,
   required final String name,
   required final int suitability,
+  final TrainingGoal assignedGoal = TrainingGoal.muscleGain,
 }) {
+  GoalConfiguration forGoal(final TrainingGoal goal) {
+    if (goal != assignedGoal) {
+      return GoalConfiguration.zero();
+    }
+    return cfg(suitability, 4, 10, 40);
+  }
+
   return Exercise(
     id: id,
     name: name,
@@ -41,10 +49,10 @@ Exercise buildExercise({
     equipment: Equipment.none,
     targetMuscleGroups: const <MuscleGroup>[MuscleGroup.core],
     goalConfigurations: fullGoalConfig(
-      muscleGain: cfg(suitability, 4, 10, 40),
-      weightLoss: cfg(suitability, 4, 12, 35),
-      strengthIncrease: cfg(suitability, 5, 6, 50),
-      enduranceIncrease: cfg(suitability, 4, 14, 35),
+      muscleGain: forGoal(TrainingGoal.muscleGain),
+      weightLoss: forGoal(TrainingGoal.weightLoss),
+      strengthIncrease: forGoal(TrainingGoal.strengthIncrease),
+      enduranceIncrease: forGoal(TrainingGoal.enduranceIncrease),
     ),
   );
 }

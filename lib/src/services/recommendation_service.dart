@@ -31,6 +31,9 @@ class RecommendationService {
     final List<RecommendationEntry> results = <RecommendationEntry>[];
 
     for (final Exercise exercise in exercises) {
+      if (exercise.assignedGoal != goal) {
+        continue;
+      }
       final GoalConfiguration config = exercise.configurationForGoal(goal);
       if (!config.isSuitable) {
         continue;
